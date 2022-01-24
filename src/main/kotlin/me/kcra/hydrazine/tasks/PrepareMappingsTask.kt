@@ -34,6 +34,8 @@ abstract class PrepareMappingsTask @Inject constructor(private val extension: Hy
             )
             logger.log(LogLevel.LIFECYCLE, "Loaded mappings for $ver.")
         }
-        (project.tasks.withType(GeneratePacketsTask::class.java) as GeneratePacketsTask).mappings = files
+        project.tasks.withType(GeneratePacketsTask::class.java) {
+            it.mappings = files
+        }
     }
 }
