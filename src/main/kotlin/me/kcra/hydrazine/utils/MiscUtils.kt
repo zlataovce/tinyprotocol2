@@ -3,17 +3,18 @@ package me.kcra.hydrazine.utils
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import net.minecraftforge.srgutils.IMappingFile
 import java.io.*
+import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLConnection
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
-import java.util.*
 import java.util.stream.Collectors
 import java.util.zip.ZipFile
 import kotlin.experimental.and
+
 
 val MAPPER: ObjectMapper = jacksonObjectMapper()
 private val SHA_1 = MessageDigest.getInstance("SHA-1")
@@ -23,20 +24,23 @@ fun newFile(fileName: String, workFolder: File): File {
     return Path.of(workFolder.absolutePath, fileName).toFile()
 }
 
-fun getFromURL(url: String, fileName: String, workFolder: File, sha1: String?): File? {
+fun getFromURL(urlS: String, fileName: String, workFolder: File, sha1: String?): File? {
     val downloadedFile: File = newFile(fileName, workFolder)
-    if (downloadedFile.isFile && sha1 != null) {
-        if (getFileChecksum(SHA_1, downloadedFile) == sha1) {
-            return downloadedFile
+    val url = URL(urlS)
+    if (downloadedFile.isFile) {
+        if (sha1 != null) {
+            if (getFileChecksum(SHA_1, downloadedFile) == sha1) {
+                return downloadedFile
+            }
+        } else {
+            if (getContentLength(url) == downloadedFile.length()) {
+                return downloadedFile
+            }
         }
     }
     try {
-        URL(url).openStream().use { inputStream ->
-            Files.copy(
-                inputStream,
-                downloadedFile.toPath(),
-                StandardCopyOption.REPLACE_EXISTING
-            )
+        url.openStream().use { inputStream ->
+            Files.copy(inputStream, downloadedFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
         }
     } catch (e: Exception) {
         return null
@@ -44,7 +48,7 @@ fun getFromURL(url: String, fileName: String, workFolder: File, sha1: String?): 
     return downloadedFile
 }
 
-fun getFromURL(url: String): String? {
+fun getStringFromURL(url: String): String? {
     try {
         URL(url).openStream().use { inputStream ->
             return BufferedReader(InputStreamReader(inputStream)).lines().collect(Collectors.joining("\n"))
@@ -63,8 +67,7 @@ fun minecraftResource(ver: String, res: String, workFolder: File): File? {
             if (versionManifest.path("downloads").has(res)) {
                 return getFromURL(
                     versionManifest.path("downloads").path(res).get("url").asText(),
-                    res + "_" + ver + ".res",
-                    workFolder,
+                    res + "_" + ver + ".res", workFolder,
                     versionManifest.path("downloads").path(res).get("sha1").asText()
                 )
             }
@@ -73,39 +76,13 @@ fun minecraftResource(ver: String, res: String, workFolder: File): File? {
     return null
 }
 
-fun seargeMapping(ver: String, workFolder: File): File? {
-    return Objects.requireNonNullElseGet(
-        seargeMapping0("https://maven.minecraftforge.net/de/oceanlabs/mcp/mcp_config/$ver/mcp_config-$ver.zip", ver, workFolder)
-    ) {
-        seargeMapping0(
-            "https://maven.minecraftforge.net/de/oceanlabs/mcp/mcp/$ver/mcp-$ver-srg.zip",
-            ver,
-            workFolder
-        )
-    }
+fun seargeMapping(ver: String, workFolder: File): InputStream? {
+    return seargeMapping0("https://maven.minecraftforge.net/de/oceanlabs/mcp/mcp_config/$ver/mcp_config-$ver.zip", ver, workFolder)
+        ?: seargeMapping0("https://maven.minecraftforge.net/de/oceanlabs/mcp/mcp/$ver/mcp-$ver-srg.zip", ver, workFolder)
 }
 
-fun seargeMappingRaw(ver: String, workFolder: File): InputStream? {
-    return Objects.requireNonNullElseGet(
-        seargeMapping1("https://maven.minecraftforge.net/de/oceanlabs/mcp/mcp_config/$ver/mcp_config-$ver.zip", ver, workFolder)
-    ) {
-        seargeMapping1(
-            "https://maven.minecraftforge.net/de/oceanlabs/mcp/mcp/$ver/mcp-$ver-srg.zip",
-            ver,
-            workFolder
-        )
-    }
-}
-
-private fun seargeMapping0(url: String, ver: String, workFolder: File): File? {
-    val extractedFile: File = newFile("mcp_$ver.extracted", workFolder)
-    val output = seargeMapping1(url, ver, workFolder) ?: return null
-    Files.copy(output, extractedFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
-    return extractedFile
-}
-
-private fun seargeMapping1(url: String, ver: String, workFolder: File): InputStream? {
-    val file: File = getFromURL(url, "mcp_$ver.zip", workFolder, getFromURL("$url.sha1")) ?: return null
+private fun seargeMapping0(url: String, ver: String, workFolder: File): InputStream? {
+    val file: File = getFromURL(url, "mcp_$ver.zip", workFolder, getStringFromURL("$url.sha1")) ?: return null
     val zipFile = ZipFile(file)
     return zipFile.getInputStream(
         zipFile.stream()
@@ -116,10 +93,7 @@ private fun seargeMapping1(url: String, ver: String, workFolder: File): InputStr
 }
 
 fun intermediaryMapping(ver: String, workFolder: File): File? =
-    getFromURL(
-        "https://raw.githubusercontent.com/FabricMC/intermediary/master/mappings/$ver.tiny",
-        "$ver.tiny", workFolder, null
-    )
+    getFromURL("https://raw.githubusercontent.com/FabricMC/intermediary/master/mappings/$ver.tiny", "$ver.tiny", workFolder, null)
 
 fun spigotMapping(ver: String, workFolder: File): File? {
     val versionManifest: JsonNode = try {
@@ -157,10 +131,20 @@ fun getFileChecksum(digest: MessageDigest, file: File): String {
     return sb.toString()
 }
 
-fun reverseMappingFile(file: File, format: IMappingFile.Format) {
-    val iMappingFile: IMappingFile = IMappingFile.load(file)
-    if (iMappingFile.classes.stream().anyMatch { e -> e.original.contains("/") }) {
-        // needs to be reversed
-        iMappingFile.reverse().write(file.toPath(), format, false)
+fun getContentLength(url: URL): Long {
+    var conn: URLConnection? = null
+    try {
+        conn = url.openConnection()
+        if (conn is HttpURLConnection) {
+            (conn as HttpURLConnection?)?.requestMethod = "HEAD"
+        }
+        return conn.contentLengthLong
+    } catch (ignored: IOException) {
+        // ignored
+    } finally {
+        if (conn is HttpURLConnection) {
+            (conn as HttpURLConnection?)?.disconnect()
+        }
     }
+    return -1
 }
