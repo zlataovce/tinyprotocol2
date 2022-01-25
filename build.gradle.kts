@@ -16,7 +16,6 @@ repositories {
 
 dependencies {
     compileOnly(kotlin("stdlib"))
-    implementation("com.uchuhimo:kotlinx-bimap:1.2")
     implementation("me.kcra.acetylene:srgutils:0.0.1-SNAPSHOT")
     implementation("net.minecraftforge:srgutils:0.4.11-SNAPSHOT")
     implementation("com.squareup:javapoet:1.13.0")

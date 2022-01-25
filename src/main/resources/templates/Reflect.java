@@ -64,12 +64,8 @@ public final class Reflect {
         return field;
     }
 
-    public static void setField(Class<?> clazz, String name, Object instance, Object value) {
+    public static void setField(Field field, Object instance, Object value) {
         try {
-            final Field field = getField(clazz, name);
-            if (field == null) {
-                return;
-            }
             field.setAccessible(true);
             if (Modifier.isFinal(field.getModifiers())) {
                 final Field modifiersField = Field.class.getDeclaredField("modifiers");

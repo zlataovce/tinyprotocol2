@@ -5,6 +5,7 @@ abstract class HydrazinePluginExtension {
     internal val versions: MutableMap<String, Int> = mutableMapOf()
     var sourceSet: String = "generated"
     var packageName: String? = null
+    var utilsPackageName: String? = null
     var mutable = false
 
     fun packet(vararg def: String) = packets.addAll(def)

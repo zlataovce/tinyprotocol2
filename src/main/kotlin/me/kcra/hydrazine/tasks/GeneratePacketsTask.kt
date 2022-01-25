@@ -2,9 +2,6 @@ package me.kcra.hydrazine.tasks
 
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.squareup.javapoet.*
-import com.uchuhimo.collections.BiMap
-import com.uchuhimo.collections.MutableBiMap
-import com.uchuhimo.collections.toMutableBiMap
 import me.kcra.acetylene.core.TypedDescriptableMapping
 import me.kcra.acetylene.core.TypedMappingFile
 import me.kcra.acetylene.core.ancestry.ClassAncestorTree
@@ -18,6 +15,8 @@ import org.gradle.api.logging.LogLevel
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.SourceSet
 import org.gradle.api.tasks.TaskAction
+import java.io.File
+import java.lang.reflect.Field
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -42,7 +41,7 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
 
     @TaskAction
     fun run() {
-        val protocols: BiMap<String, Int> = protocolVersions()
+        val protocols: Map<String, Int> = protocolVersions()
         val protocolList: List<Int> = protocols.values.toList()
         for (name: String in extension.packets) {
             logger.log(LogLevel.INFO, "Creating packet wrapper of class $name...")
@@ -54,12 +53,27 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
                 ?: throw RuntimeException("Could not map class $name")
             val builder: TypeSpec.Builder = TypeSpec.classBuilder("W" + className.substring(className.lastIndexOf('.') + 1))
                 .addModifiers(Modifier.PUBLIC)
-                .addSuperinterface(ClassName.get("me.kcra.hydrazine.utils", "Packet"))
+                .addSuperinterface(ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "Packet"))
                 .addAnnotation(
-                    AnnotationSpec.builder(ClassName.get("me.kcra.hydrazine.utils", "Reobfuscate"))
+                    AnnotationSpec.builder(ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "Reobfuscate"))
                         .addMember("value", "\$S", joinMappings(tree, protocolList))
                         .build()
                 )
+            // LimitedSupport annotation
+            if (tree.size() < mappings.size) {
+                builder.addAnnotation(
+                    AnnotationSpec.builder(ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "LimitedSupport"))
+                        .also { annotationBuilder ->
+                            if (tree.offset > 0) {
+                                annotationBuilder.addMember("min", "\$L", protocolList[tree.offset + 1])
+                            }
+                            if ((tree.size() + tree.offset) < mappings.size) {
+                                annotationBuilder.addMember("max", "\$L", protocolList[tree.size() + tree.offset])
+                            }
+                        }
+                        .build()
+                )
+            }
             // fields
             for (field: TypedDescriptableMapping in tree.classes[0].fields) {
                 val fieldTree: DescriptableAncestorTree = tree.fieldAncestors(field.mapped(MappingType.MOJANG))
@@ -71,10 +85,27 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
                         FieldSpec.builder(bestGuess(type), field.mapped(MappingType.MOJANG))
                             .addModifiers(Modifier.PRIVATE)
                             .addAnnotation(
-                                AnnotationSpec.builder(ClassName.get("me.kcra.hydrazine.utils", "Reobfuscate"))
+                                AnnotationSpec.builder(ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "Reobfuscate"))
                                     .addMember("value", "\$S", joinMappings(fieldTree, protocolList))
                                     .build()
                             )
+                            .also { fieldBuilder ->
+                                // LimitedSupport annotation
+                                if (fieldTree.size() < mappings.size) {
+                                    fieldBuilder.addAnnotation(
+                                        AnnotationSpec.builder(ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "LimitedSupport"))
+                                            .also { annotationBuilder ->
+                                                if (fieldTree.offset > 0) {
+                                                    annotationBuilder.addMember("min", "\$L", protocolList[fieldTree.offset + 1])
+                                                }
+                                                if ((fieldTree.size() + fieldTree.offset) < mappings.size) {
+                                                    annotationBuilder.addMember("max", "\$L", protocolList[fieldTree.size() + fieldTree.offset])
+                                                }
+                                            }
+                                            .build()
+                                    )
+                                }
+                            }
                     )
                 }
             }
@@ -89,7 +120,33 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
                     .addStatement("final Class<?> nmsPacketClass = getClassSafe(findMapping(getClass(), ver))")
                     .addStatement("final Object nmsPacket = construct(nmsPacketClass)")
                     .also { methodBuilder -> builder.fieldSpecs.forEach { field ->
-                        methodBuilder.addStatement("setField(nmsPacketClass, findMapping(name, getField(getClass(), \$S), ver), nmsPacket, ${field.name})", field.name)
+                        val limitedSupport: AnnotationSpec? = field.annotations.stream()
+                            .filter { it.type is ClassName && (it.type as ClassName).simpleName().equals("LimitedSupport") }
+                            .findFirst()
+                            .orElse(null)
+                        if (limitedSupport != null) {
+                            val min: Int? = limitedSupport.members["min"]?.get(0)?.toString()?.toInt()
+                            val max: Int? = limitedSupport.members["max"]?.get(0)?.toString()?.toInt()
+                            if (min != null && max != null) {
+                                methodBuilder.beginControlFlow("if (ver < \$L && ver > \$L)", max, min)
+                                    .addStatement("final \$T ${field.name}Field = getField(nmsPacketClass, findMapping(name, getField(getClass(), \$S), ver))", Field::class.java, field.name)
+                                    .addStatement("setField(${field.name}Field, nmsPacket, ${field.name})")
+                                    .endControlFlow()
+                            } else if (min != null) {
+                                methodBuilder.beginControlFlow("if (ver > \$L)", min)
+                                    .addStatement("final \$T ${field.name}Field = getField(nmsPacketClass, findMapping(name, getField(getClass(), \$S), ver))", Field::class.java, field.name)
+                                    .addStatement("setField(${field.name}Field, nmsPacket, ${field.name})")
+                                    .endControlFlow()
+                            } else if (max != null) {
+                                methodBuilder.beginControlFlow("if (ver < \$L)", max)
+                                    .addStatement("final \$T ${field.name}Field = getField(nmsPacketClass, findMapping(name, getField(getClass(), \$S), ver))", Field::class.java, field.name)
+                                    .addStatement("setField(${field.name}Field, nmsPacket, ${field.name})")
+                                    .endControlFlow()
+                            }
+                        } else {
+                            methodBuilder.addStatement("final \$T ${field.name}Field = getField(nmsPacketClass, findMapping(name, getField(getClass(), \$S), ver))", Field::class.java, field.name)
+                                .addStatement("setField(${field.name}Field, nmsPacket, ${field.name})")
+                        }
                     } }
                     .addStatement("return nmsPacket")
                     .build()
@@ -104,16 +161,16 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
                     .build()
             )
             JavaFile.builder(extension.packageName ?: className.substring(0, className.lastIndexOf('.')), builder.build())
-                .addStaticImport(ClassName.get("me.kcra.hydrazine.utils", "Reflect"), "*")
-                .addStaticImport(ClassName.get("me.kcra.hydrazine.utils", "MappingUtils"), "*")
+                .addStaticImport(ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "Reflect"), "*")
+                .addStaticImport(ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "MappingUtils"), "*")
                 .build()
                 .writeToFile(sourceSet.java.srcDirs.first())
         }
-        copyTemplateClasses("Reflect", "Reobfuscate", "MappingUtils", "Packet")
+        copyTemplateClasses("Reflect", "Reobfuscate", "MappingUtils", "Packet", "LimitedSupport")
     }
 
-    private fun protocolVersions(): BiMap<String, Int> {
-        val versions: MutableBiMap<String, Int> = extension.versions.toMutableBiMap()
+    private fun protocolVersions(): Map<String, Int> {
+        val versions: MutableMap<String, Int> = extension.versions.toMutableMap()
         if (versions.containsValue(-1)) {
             val refreshedVersions: Map<String, Int> =
                 MAPPER.readValue<List<ProtocolData>>(URL("https://raw.githubusercontent.com/PrismarineJS/minecraft-data/master/data/pc/common/protocolVersions.json"))
@@ -195,10 +252,11 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
     }
 
     private fun copyTemplateClass(name: String) {
-        val path: Path = Path.of(sourceSet.java.srcDirs.first().absolutePath,"me", "kcra", "hydrazine", "utils", "$name.java")
+        val utilPackage = extension.utilsPackageName ?: "me.kcra.hydrazine.utils"
+        val path: Path = Path.of(sourceSet.java.srcDirs.first().absolutePath, utilPackage.replace('.', File.separatorChar), "$name.java")
             .also { it.parent.toFile().mkdirs() }
         Files.copy(javaClass.getResourceAsStream("/templates/$name.java")!!, path, StandardCopyOption.REPLACE_EXISTING)
-        Files.writeString(path, "package me.kcra.hydrazine.utils;\n\n" + Files.readString(path, StandardCharsets.UTF_8))
+        Files.writeString(path, "package $utilPackage;\n\n" + Files.readString(path, StandardCharsets.UTF_8).replace("{utilPackage}", utilPackage))
     }
 
     private fun joinMappings(tree: ClassAncestorTree, protocolVersions: List<Int>): String {
