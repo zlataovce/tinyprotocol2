@@ -8,15 +8,22 @@ import com.uchuhimo.collections.toMutableBiMap
 import me.kcra.acetylene.core.TypedDescriptableMapping
 import me.kcra.acetylene.core.TypedMappingFile
 import me.kcra.acetylene.core.ancestry.ClassAncestorTree
+import me.kcra.acetylene.core.ancestry.DescriptableAncestorTree
 import me.kcra.hydrazine.HydrazinePluginExtension
 import me.kcra.hydrazine.utils.MAPPER
 import me.kcra.hydrazine.utils.MappingType
 import me.kcra.hydrazine.utils.ProtocolData
 import org.gradle.api.DefaultTask
+import org.gradle.api.logging.LogLevel
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.SourceSet
 import org.gradle.api.tasks.TaskAction
 import java.net.URL
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.util.stream.Collectors
 import javax.inject.Inject
 import javax.lang.model.element.Modifier
 
@@ -36,7 +43,9 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
     @TaskAction
     fun run() {
         val protocols: BiMap<String, Int> = protocolVersions()
+        val protocolList: List<Int> = protocols.values.toList()
         for (name: String in extension.packets) {
+            logger.log(LogLevel.INFO, "Creating packet wrapper of class $name...")
             val tree: ClassAncestorTree = ClassAncestorTree.of(name, mappings)
             if (tree.size() == 0) {
                 throw RuntimeException("Could not map class $name")
@@ -45,33 +54,66 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
                 ?: throw RuntimeException("Could not map class $name")
             val builder: TypeSpec.Builder = TypeSpec.classBuilder("W" + className.substring(className.lastIndexOf('.') + 1))
                 .addModifiers(Modifier.PUBLIC)
+                .addSuperinterface(ClassName.get("me.kcra.hydrazine.utils", "Packet"))
+                .addAnnotation(
+                    AnnotationSpec.builder(ClassName.get("me.kcra.hydrazine.utils", "Reobfuscate"))
+                        .addMember("value", "\$S", joinMappings(tree, protocolList))
+                        .build()
+                )
+            // fields
             for (field: TypedDescriptableMapping in tree.classes[0].fields) {
+                val fieldTree: DescriptableAncestorTree = tree.fieldAncestors(field.mapped(MappingType.MOJANG))
                 val type: String = convertType(field.descriptor)
+                logger.log(LogLevel.INFO, "Creating field " + field.mapped() + ", is JDK type: " + (type.startsWith("java") || primitiveTypes.contains(type)))
                 if (type.startsWith("java") || primitiveTypes.contains(type)) {
                     // basic java type
                     builder.createField(
                         FieldSpec.builder(bestGuess(type), field.mapped(MappingType.MOJANG))
                             .addModifiers(Modifier.PRIVATE)
+                            .addAnnotation(
+                                AnnotationSpec.builder(ClassName.get("me.kcra.hydrazine.utils", "Reobfuscate"))
+                                    .addMember("value", "\$S", joinMappings(fieldTree, protocolList))
+                                    .build()
+                            )
                     )
                 }
             }
+            // toNMS method
+            builder.addMethod(
+                MethodSpec.methodBuilder("toNMS")
+                    .addModifiers(Modifier.PUBLIC)
+                    .returns(ClassName.OBJECT)
+                    .addParameter(ClassName.INT, "ver")
+                    .addAnnotation(AnnotationSpec.builder(ClassName.get("java.lang", "Override")).build())
+                    .addStatement("final String name = getClass().getSimpleName()")
+                    .addStatement("final Class<?> nmsPacketClass = getClassSafe(findMapping(getClass(), ver))")
+                    .addStatement("final Object nmsPacket = construct(nmsPacketClass)")
+                    .also { methodBuilder -> builder.fieldSpecs.forEach { field ->
+                        methodBuilder.addStatement("setField(nmsPacketClass, findMapping(name, getField(getClass(), \$S), ver), nmsPacket, ${field.name})", field.name)
+                    } }
+                    .addStatement("return nmsPacket")
+                    .build()
+            )
 
-            val constructorBuilder: MethodSpec.Builder = MethodSpec.constructorBuilder()
-                .addModifiers(Modifier.PUBLIC)
-            for (field: FieldSpec in builder.fieldSpecs) {
-                constructorBuilder.addParameter(field.type, field.name)
-                constructorBuilder.addStatement("this." + field.name + " = " + field.name)
-            }
-            builder.addMethod(constructorBuilder.build())
-            JavaFile.builder(
-                extension.packageName ?: className.substring(0, className.lastIndexOf('.')),
-                builder.build()
-            ).build().writeToFile(sourceSet.java.srcDirs.first())
+            // required args constructor
+            logger.log(LogLevel.INFO, "Creating constructor...")
+            builder.addMethod(
+                MethodSpec.constructorBuilder()
+                    .addModifiers(Modifier.PUBLIC)
+                    .also { builder.fieldSpecs.forEach { field -> it.addParameter(field.type, field.name).addStatement("this." + field.name + " = " + field.name) } }
+                    .build()
+            )
+            JavaFile.builder(extension.packageName ?: className.substring(0, className.lastIndexOf('.')), builder.build())
+                .addStaticImport(ClassName.get("me.kcra.hydrazine.utils", "Reflect"), "*")
+                .addStaticImport(ClassName.get("me.kcra.hydrazine.utils", "MappingUtils"), "*")
+                .build()
+                .writeToFile(sourceSet.java.srcDirs.first())
         }
+        copyTemplateClasses("Reflect", "Reobfuscate", "MappingUtils", "Packet")
     }
 
     private fun protocolVersions(): BiMap<String, Int> {
-        val versions: MutableBiMap<String, Int> = project.extensions.getByType(HydrazinePluginExtension::class.java).versions.toMutableBiMap()
+        val versions: MutableBiMap<String, Int> = extension.versions.toMutableBiMap()
         if (versions.containsValue(-1)) {
             val refreshedVersions: Map<String, Int> =
                 MAPPER.readValue<List<ProtocolData>>(URL("https://raw.githubusercontent.com/PrismarineJS/minecraft-data/master/data/pc/common/protocolVersions.json"))
@@ -146,5 +188,38 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
                 .build()
         )
         return this
+    }
+
+    private fun copyTemplateClasses(vararg names: String) {
+        names.forEach { copyTemplateClass(it) }
+    }
+
+    private fun copyTemplateClass(name: String) {
+        val path: Path = Path.of(sourceSet.java.srcDirs.first().absolutePath,"me", "kcra", "hydrazine", "utils", "$name.java")
+            .also { it.parent.toFile().mkdirs() }
+        Files.copy(javaClass.getResourceAsStream("/templates/$name.java")!!, path, StandardCopyOption.REPLACE_EXISTING)
+        Files.writeString(path, "package me.kcra.hydrazine.utils;\n\n" + Files.readString(path, StandardCharsets.UTF_8))
+    }
+
+    private fun joinMappings(tree: ClassAncestorTree, protocolVersions: List<Int>): String {
+        // obfuscated -> versions
+        val joined: MutableMap<String, MutableList<Int>> = mutableMapOf()
+        tree.classes.forEachIndexed { index, element ->
+            joined.getOrPut(element.mapped(MappingType.SPIGOT) ?: element.original) { mutableListOf() }.add(protocolVersions[index + tree.offset])
+        }
+        return joined.entries.stream()
+            .map { "[${it.value.joinToString(",")}]=${it.key}" }
+            .collect(Collectors.joining("+"))
+    }
+
+    private fun joinMappings(tree: DescriptableAncestorTree, protocolVersions: List<Int>): String {
+        // obfuscated -> versions
+        val joined: MutableMap<String, MutableList<Int>> = mutableMapOf()
+        tree.descriptables.forEachIndexed { index, element ->
+            joined.getOrPut(element.mapped(MappingType.SPIGOT) ?: element.original) { mutableListOf() }.add(protocolVersions[index + tree.offset])
+        }
+        return joined.entries.stream()
+            .map { "${it.value.joinToString(",")}=${it.key}" }
+            .collect(Collectors.joining("+"))
     }
 }
