@@ -48,11 +48,11 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
         for (name: String in extension.packets) {
             logger.log(LogLevel.INFO, "Creating packet wrapper of class $name...")
             val tree: ClassAncestorTree = ClassAncestorTree.of(name, mappings)
+            logger.log(LogLevel.INFO, "Mapped ${tree.size()} version(s) of mapping $name.")
             if (tree.size() == 0) {
                 throw RuntimeException("Could not map class $name")
             }
-            val className: String = tree.classes[0].mapped(MappingType.MOJANG)?.replace('/', '.')
-                ?: throw RuntimeException("Could not map class $name")
+            val className: String = tree.classes[0].mappings[0].value().replace('/', '.')
             val builder: TypeSpec.Builder = TypeSpec.classBuilder("W" + className.substring(className.lastIndexOf('.') + 1))
                 .addModifiers(Modifier.PUBLIC)
                 .addSuperinterface(ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "Packet"))
@@ -75,12 +75,13 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
             val currentClassName: ClassName = ClassName.get(extension.packageName ?: className.substring(0, className.lastIndexOf('.')), "W" + className.substring(className.lastIndexOf('.') + 1))
             // fields
             for (field: TypedDescriptableMapping in walkFields(tree)) {
-                val friendlyMapping: String = selectFriendlyMapping(field)
-                val fieldTree: DescriptableAncestorTree = tree.fieldAncestors(friendlyMapping)
+                val mappings1: List<String> = field.mappings.stream().map { it.value().key() }.toList()
+                val fieldTree: DescriptableAncestorTree = tree.fieldAncestors(mappings1)
+                logger.log(LogLevel.INFO, "Mapped ${fieldTree.size()} version(s) of friendly mapping ${mappings1.joinToString(",")}.")
                 val type: String = convertType(field.descriptor)
-                logger.log(LogLevel.INFO, "Creating field " + field.mapped() + ", is JDK type: " + (type.startsWith("java") || primitiveTypes.contains(type)))
+                logger.log(LogLevel.INFO, "Creating field ${field.mapped()}, is JDK type: ${(type.startsWith("java") || primitiveTypes.contains(type))}")
                 builder.createField(
-                    FieldSpec.builder(if (type.startsWith("java") || primitiveTypes.contains(type)) bestGuess(type) else ClassName.OBJECT, friendlyMapping)
+                    FieldSpec.builder(if (type.startsWith("java") || primitiveTypes.contains(type)) bestGuess(type) else ClassName.OBJECT, mappings1[0])
                         .addModifiers(Modifier.PRIVATE)
                         .addAnnotation(
                             AnnotationSpec.builder(ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "Reobfuscate"))
@@ -251,7 +252,12 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
         // obfuscated -> versions
         val joined: MutableMap<String, MutableList<Int>> = mutableMapOf()
         tree.classes.forEachIndexed { index, element ->
-            joined.getOrPut(element.mapped(MappingType.SPIGOT) ?: element.original) { mutableListOf() }.add(protocolVersions[index + tree.offset])
+            joined.getOrPut(element.mapped(MappingType.SPIGOT) ?: element.original) { mutableListOf() }.also { versions ->
+                val ver: Int = protocolVersions[index + tree.offset]
+                if (!versions.contains(ver)) {
+                    versions.add(ver)
+                }
+            }
         }
         return joined.entries.stream()
             .map { "${it.value.joinToString(",")}=${it.key}" }
@@ -262,7 +268,12 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
         // obfuscated -> versions
         val joined: MutableMap<String, MutableList<Int>> = mutableMapOf()
         tree.descriptables.forEachIndexed { index, element ->
-            joined.getOrPut(element.mapped(MappingType.SPIGOT) ?: element.original) { mutableListOf() }.add(protocolVersions[index + tree.offset])
+            joined.getOrPut(element.mapped(MappingType.SPIGOT) ?: element.original) { mutableListOf() }.also { versions ->
+                val ver: Int = protocolVersions[index + tree.offset]
+                if (!versions.contains(ver)) {
+                    versions.add(ver)
+                }
+            }
         }
         return joined.entries.stream()
             .map { "${it.value.joinToString(",")}=${it.key}" }
@@ -274,14 +285,17 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
         for (clazz: TypedClassMapping in tree.classes) {
             fields.addAll(
                 clazz.fields.stream()
-                    .filter { f -> fields.stream().noneMatch { !Collections.disjoint(f.mappings, it.mappings) } }
+                    .filter { f ->
+                        fields.stream().noneMatch { f1 ->
+                            !Collections.disjoint(
+                                f.mappings.stream().map { it.value().key() }.toList(),
+                                f1.mappings.stream().map { it.value().key() }.toList()
+                            )
+                        }
+                    }
                     .toList()
             )
         }
         return fields
-    }
-
-    private fun selectFriendlyMapping(descr: TypedDescriptableMapping): String {
-        return descr.mappings[0].value().key()
     }
 }

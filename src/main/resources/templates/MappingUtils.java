@@ -21,7 +21,7 @@ public final class MappingUtils {
         final String[] parts = mapping.split("\\+");
         for (int i = 0; i < parts.length; i++) {
             final String[] sides = parts[i].split("=");
-            mappings.computeIfAbsent(sides[1], key -> new ArrayList<>())
+            mappings.computeIfAbsent(sides[1].replace('/', '.'), key -> new ArrayList<>())
                     .addAll(Arrays.asList(sides[0].split(",")).stream().map(Integer::parseInt).collect(Collectors.toList()));
         }
         final Map<String, List<Integer>> finalizedMap = Collections.unmodifiableMap(mappings);
