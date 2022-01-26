@@ -2,6 +2,7 @@ package me.kcra.hydrazine.tasks
 
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.squareup.javapoet.*
+import me.kcra.acetylene.core.TypedClassMapping
 import me.kcra.acetylene.core.TypedDescriptableMapping
 import me.kcra.acetylene.core.TypedMappingFile
 import me.kcra.acetylene.core.ancestry.ClassAncestorTree
@@ -22,6 +23,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.util.*
 import java.util.stream.Collectors
 import javax.inject.Inject
 import javax.lang.model.element.Modifier
@@ -57,58 +59,47 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
                 .addAnnotation(
                     AnnotationSpec.builder(ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "Reobfuscate"))
                         .addMember("value", "\$S", joinMappings(tree, protocolList))
-                        .build()
-                )
-            // LimitedSupport annotation
-            if (tree.size() < mappings.size) {
-                builder.addAnnotation(
-                    AnnotationSpec.builder(ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "LimitedSupport"))
                         .also { annotationBuilder ->
-                            if (tree.offset > 0) {
-                                annotationBuilder.addMember("min", "\$L", protocolList[tree.offset + 1])
-                            }
-                            if ((tree.size() + tree.offset) < mappings.size) {
-                                annotationBuilder.addMember("max", "\$L", protocolList[tree.size() + tree.offset])
+                            // limited support
+                            if (tree.size() < mappings.size) {
+                                if (tree.offset > 0) {
+                                    annotationBuilder.addMember("min", "\$L", protocolList[tree.offset])
+                                }
+                                if ((tree.size() + tree.offset) < mappings.size) {
+                                    annotationBuilder.addMember("max", "\$L", protocolList[(tree.size() - 1) + tree.offset])
+                                }
                             }
                         }
                         .build()
                 )
-            }
+            val currentClassName: ClassName = ClassName.get(extension.packageName ?: className.substring(0, className.lastIndexOf('.')), "W" + className.substring(className.lastIndexOf('.') + 1))
             // fields
-            for (field: TypedDescriptableMapping in tree.classes[0].fields) {
-                val fieldTree: DescriptableAncestorTree = tree.fieldAncestors(field.mapped(MappingType.MOJANG))
+            for (field: TypedDescriptableMapping in walkFields(tree)) {
+                val friendlyMapping: String = selectFriendlyMapping(field)
+                val fieldTree: DescriptableAncestorTree = tree.fieldAncestors(friendlyMapping)
                 val type: String = convertType(field.descriptor)
                 logger.log(LogLevel.INFO, "Creating field " + field.mapped() + ", is JDK type: " + (type.startsWith("java") || primitiveTypes.contains(type)))
-                if (type.startsWith("java") || primitiveTypes.contains(type)) {
-                    // basic java type
-                    builder.createField(
-                        FieldSpec.builder(bestGuess(type), field.mapped(MappingType.MOJANG))
-                            .addModifiers(Modifier.PRIVATE)
-                            .addAnnotation(
-                                AnnotationSpec.builder(ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "Reobfuscate"))
-                                    .addMember("value", "\$S", joinMappings(fieldTree, protocolList))
-                                    .build()
-                            )
-                            .also { fieldBuilder ->
-                                // LimitedSupport annotation
-                                if (fieldTree.size() < mappings.size) {
-                                    fieldBuilder.addAnnotation(
-                                        AnnotationSpec.builder(ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "LimitedSupport"))
-                                            .also { annotationBuilder ->
-                                                if (fieldTree.offset > 0) {
-                                                    annotationBuilder.addMember("min", "\$L", protocolList[fieldTree.offset + 1])
-                                                }
-                                                if ((fieldTree.size() + fieldTree.offset) < mappings.size) {
-                                                    annotationBuilder.addMember("max", "\$L", protocolList[fieldTree.size() + fieldTree.offset])
-                                                }
-                                            }
-                                            .build()
-                                    )
+                builder.createField(
+                    FieldSpec.builder(if (type.startsWith("java") || primitiveTypes.contains(type)) bestGuess(type) else ClassName.OBJECT, friendlyMapping)
+                        .addModifiers(Modifier.PRIVATE)
+                        .addAnnotation(
+                            AnnotationSpec.builder(ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "Reobfuscate"))
+                                .addMember("value", "\$S", joinMappings(fieldTree, protocolList))
+                                .also { annotationBuilder ->
+                                    // limited support
+                                    if (fieldTree.offset > 0) {
+                                        annotationBuilder.addMember("min", "\$L", protocolList[fieldTree.offset])
+                                    }
+                                    if ((fieldTree.size() + fieldTree.offset) < mappings.size) {
+                                        annotationBuilder.addMember("max", "\$L", protocolList[(fieldTree.size() - 1) + fieldTree.offset])
+                                    }
                                 }
-                            }
-                    )
-                }
+                                .build()
+                        )
+                )
             }
+            val reflectClass: ClassName = ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "Reflect")
+            val mappingUtilsClass: ClassName = ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "MappingUtils")
             // toNMS method
             builder.addMethod(
                 MethodSpec.methodBuilder("toNMS")
@@ -117,35 +108,33 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
                     .addParameter(ClassName.INT, "ver")
                     .addAnnotation(AnnotationSpec.builder(ClassName.get("java.lang", "Override")).build())
                     .addStatement("final String name = getClass().getSimpleName()")
-                    .addStatement("final Class<?> nmsPacketClass = getClassSafe(findMapping(getClass(), ver))")
-                    .addStatement("final Object nmsPacket = construct(nmsPacketClass)")
+                    .addStatement("final Class<?> nmsPacketClass = \$T.getClassSafe(\$T.findMapping(getClass(), ver))", reflectClass, mappingUtilsClass)
+                    .addStatement("final Object nmsPacket = \$T.construct(nmsPacketClass)", reflectClass)
                     .also { methodBuilder -> builder.fieldSpecs.forEach { field ->
-                        val limitedSupport: AnnotationSpec? = field.annotations.stream()
-                            .filter { it.type is ClassName && (it.type as ClassName).simpleName().equals("LimitedSupport") }
+                        val reobfAnnotation: AnnotationSpec = field.annotations.stream()
+                            .filter { it.type is ClassName && (it.type as ClassName).simpleName().equals("Reobfuscate") }
                             .findFirst()
-                            .orElse(null)
-                        if (limitedSupport != null) {
-                            val min: Int? = limitedSupport.members["min"]?.get(0)?.toString()?.toInt()
-                            val max: Int? = limitedSupport.members["max"]?.get(0)?.toString()?.toInt()
-                            if (min != null && max != null) {
-                                methodBuilder.beginControlFlow("if (ver < \$L && ver > \$L)", max, min)
-                                    .addStatement("final \$T ${field.name}Field = getField(nmsPacketClass, findMapping(name, getField(getClass(), \$S), ver))", Field::class.java, field.name)
-                                    .addStatement("setField(${field.name}Field, nmsPacket, ${field.name})")
-                                    .endControlFlow()
-                            } else if (min != null) {
-                                methodBuilder.beginControlFlow("if (ver > \$L)", min)
-                                    .addStatement("final \$T ${field.name}Field = getField(nmsPacketClass, findMapping(name, getField(getClass(), \$S), ver))", Field::class.java, field.name)
-                                    .addStatement("setField(${field.name}Field, nmsPacket, ${field.name})")
-                                    .endControlFlow()
-                            } else if (max != null) {
-                                methodBuilder.beginControlFlow("if (ver < \$L)", max)
-                                    .addStatement("final \$T ${field.name}Field = getField(nmsPacketClass, findMapping(name, getField(getClass(), \$S), ver))", Field::class.java, field.name)
-                                    .addStatement("setField(${field.name}Field, nmsPacket, ${field.name})")
-                                    .endControlFlow()
-                            }
+                            .orElseThrow { RuntimeException("Could not find @Reobfuscate annotation for field ${field.name}") }
+                        val min: Int = reobfAnnotation.members["min"]?.get(0)?.toString()?.toInt() ?: -1
+                        val max: Int = reobfAnnotation.members["max"]?.get(0)?.toString()?.toInt() ?: -1
+                        if (min != -1 && max != -1) {
+                            methodBuilder.beginControlFlow("if (ver < \$L && ver > \$L)", max, min)
+                                .addStatement("final \$T ${field.name}Field = \$T.getField(nmsPacketClass, \$T.findMapping(name, \$T.getField(getClass(), \$S), ver))", Field::class.java, reflectClass, mappingUtilsClass, reflectClass, field.name)
+                                .addStatement("\$T.setField(${field.name}Field, nmsPacket, ${field.name})", reflectClass)
+                                .endControlFlow()
+                        } else if (min != -1) {
+                            methodBuilder.beginControlFlow("if (ver >= \$L)", min)
+                                .addStatement("final \$T ${field.name}Field = \$T.getField(nmsPacketClass, \$T.findMapping(name, \$T.getField(getClass(), \$S), ver))", Field::class.java, reflectClass, mappingUtilsClass, reflectClass, field.name)
+                                .addStatement("\$T.setField(${field.name}Field, nmsPacket, ${field.name})", reflectClass)
+                                .endControlFlow()
+                        } else if (max != -1) {
+                            methodBuilder.beginControlFlow("if (ver <= \$L)", max)
+                                .addStatement("final \$T ${field.name}Field = \$T.getField(nmsPacketClass, \$T.findMapping(name, \$T.getField(getClass(), \$S), ver))", Field::class.java, reflectClass, mappingUtilsClass, reflectClass, field.name)
+                                .addStatement("\$T.setField(${field.name}Field, nmsPacket, ${field.name})", reflectClass)
+                                .endControlFlow()
                         } else {
-                            methodBuilder.addStatement("final \$T ${field.name}Field = getField(nmsPacketClass, findMapping(name, getField(getClass(), \$S), ver))", Field::class.java, field.name)
-                                .addStatement("setField(${field.name}Field, nmsPacket, ${field.name})")
+                            methodBuilder.addStatement("final \$T ${field.name}Field = \$T.getField(nmsPacketClass, \$T.findMapping(name, \$T.getField(getClass(), \$S), ver))", Field::class.java, reflectClass, mappingUtilsClass, reflectClass, field.name)
+                                .addStatement("\$T.setField(${field.name}Field, nmsPacket, ${field.name})", reflectClass)
                         }
                     } }
                     .addStatement("return nmsPacket")
@@ -161,12 +150,11 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
                     .build()
             )
             JavaFile.builder(extension.packageName ?: className.substring(0, className.lastIndexOf('.')), builder.build())
-                .addStaticImport(ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "Reflect"), "*")
-                .addStaticImport(ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "MappingUtils"), "*")
                 .build()
                 .writeToFile(sourceSet.java.srcDirs.first())
+            logger.log(LogLevel.LIFECYCLE, "Wrote ${currentClassName.simpleName()}.")
         }
-        copyTemplateClasses("Reflect", "Reobfuscate", "MappingUtils", "Packet", "LimitedSupport")
+        copyTemplateClasses("Reflect", "Reobfuscate", "MappingUtils", "Packet")
     }
 
     private fun protocolVersions(): Map<String, Int> {
@@ -266,7 +254,7 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
             joined.getOrPut(element.mapped(MappingType.SPIGOT) ?: element.original) { mutableListOf() }.add(protocolVersions[index + tree.offset])
         }
         return joined.entries.stream()
-            .map { "[${it.value.joinToString(",")}]=${it.key}" }
+            .map { "${it.value.joinToString(",")}=${it.key}" }
             .collect(Collectors.joining("+"))
     }
 
@@ -279,5 +267,21 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
         return joined.entries.stream()
             .map { "${it.value.joinToString(",")}=${it.key}" }
             .collect(Collectors.joining("+"))
+    }
+
+    private fun walkFields(tree: ClassAncestorTree): List<TypedDescriptableMapping> {
+        val fields: MutableList<TypedDescriptableMapping> = mutableListOf()
+        for (clazz: TypedClassMapping in tree.classes) {
+            fields.addAll(
+                clazz.fields.stream()
+                    .filter { f -> fields.stream().noneMatch { !Collections.disjoint(f.mappings, it.mappings) } }
+                    .toList()
+            )
+        }
+        return fields
+    }
+
+    private fun selectFriendlyMapping(descr: TypedDescriptableMapping): String {
+        return descr.mappings[0].value().key()
     }
 }

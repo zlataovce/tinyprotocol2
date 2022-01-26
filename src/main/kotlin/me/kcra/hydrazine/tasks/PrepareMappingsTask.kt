@@ -27,9 +27,9 @@ abstract class PrepareMappingsTask @Inject constructor(private val extension: Hy
             files.add(
                 SrgUtilsMappingLoader.of(
                     Pair.of(MappingType.MOJANG, minecraftResource(ver, "server_mappings", workFolder)?.let { IMappingFile.load(it).reverse() }),
+                    Pair.of(MappingType.SPIGOT, spigotMapping(ver, workFolder)),
                     Pair.of(MappingType.INTERMEDIARY, intermediaryMapping(ver, workFolder)),
-                    Pair.of(MappingType.SEARGE, seargeMapping(ver, workFolder)?.let { IMappingFile.load(it) }),
-                    Pair.of(MappingType.SPIGOT, spigotMapping(ver, workFolder))
+                    Pair.of(MappingType.SEARGE, seargeMapping(ver, workFolder)?.let { IMappingFile.load(it) })
                 ).loadTyped()
             )
             logger.log(LogLevel.LIFECYCLE, "Loaded mappings for $ver.")

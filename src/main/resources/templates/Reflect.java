@@ -64,6 +64,14 @@ public final class Reflect {
         return field;
     }
 
+    public static Object getFieldSafe(Object instance, String name) {
+        try {
+            return getField(instance.getClass(), name).get(instance);
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
     public static void setField(Field field, Object instance, Object value) {
         try {
             field.setAccessible(true);

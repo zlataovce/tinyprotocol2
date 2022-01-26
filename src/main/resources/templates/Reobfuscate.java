@@ -7,4 +7,6 @@ import java.lang.annotation.Target;
 @Target({ElementType.TYPE, ElementType.FIELD})
 public @interface Reobfuscate {
     String value();
+    int min() default -1;
+    int max() default -1;
 }
