@@ -1,4 +1,4 @@
-package me.kcra.hydrazine.utils
+package me.kcra.tinyprotocol.utils
 
 data class ProtocolData(
     val minecraftVersion: String,

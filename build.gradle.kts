@@ -5,7 +5,7 @@ plugins {
     id("maven-publish")
 }
 
-group = "me.kcra.hydrazine"
+group = "me.kcra.tinyprotocol"
 version = "0.0.1-SNAPSHOT"
 
 repositories {
@@ -24,17 +24,17 @@ dependencies {
 
 gradlePlugin {
     plugins {
-        create("hydrazine") {
-            id = "me.kcra.hydrazine"
+        create("tinyprotocol") {
+            id = "me.kcra.tinyprotocol"
             displayName = "Plugin for generating Minecraft packet wrappers"
             description = "A plugin for generating multi-version packet wrappers for Minecraft: JE"
-            implementationClass = "me.kcra.hydrazine.HydrazinePlugin"
+            implementationClass = "me.kcra.tinyprotocol.TinyProtocolPlugin"
         }
     }
 }
 
 pluginBundle {
-    website = "https://github.com/zlataovce/hydrazine"
-    vcsUrl = "https://github.com/zlataovce/hydrazine.git"
+    website = "https://github.com/zlataovce/tinyprotocol2"
+    vcsUrl = "https://github.com/zlataovce/tinyprotocol2.git"
     tags = listOf("minecraft", "obfuscation", "packet")
 }

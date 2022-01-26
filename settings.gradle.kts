@@ -1,2 +1,2 @@
-rootProject.name = "hydrazine"
+rootProject.name = "tinyprotocol"
 

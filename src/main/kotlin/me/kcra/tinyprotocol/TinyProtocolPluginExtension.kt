@@ -1,6 +1,6 @@
-package me.kcra.hydrazine
+package me.kcra.tinyprotocol
 
-abstract class HydrazinePluginExtension {
+abstract class TinyProtocolPluginExtension {
     internal val packets: MutableList<String> = mutableListOf()
     internal val versions: MutableMap<String, Int> = mutableMapOf()
     var sourceSet: String = "generated"

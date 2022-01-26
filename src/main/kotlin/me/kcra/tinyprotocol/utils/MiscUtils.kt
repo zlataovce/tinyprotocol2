@@ -1,4 +1,4 @@
-package me.kcra.hydrazine.utils
+package me.kcra.tinyprotocol.utils
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper

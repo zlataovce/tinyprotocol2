@@ -1,7 +1,7 @@
-package me.kcra.hydrazine
+package me.kcra.tinyprotocol
 
-import me.kcra.hydrazine.tasks.PrepareMappingsTask
-import me.kcra.hydrazine.tasks.GeneratePacketsTask
+import me.kcra.tinyprotocol.tasks.PrepareMappingsTask
+import me.kcra.tinyprotocol.tasks.GeneratePacketsTask
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.plugins.JavaPlugin
@@ -11,9 +11,9 @@ import org.gradle.api.tasks.SourceSet
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.util.GradleVersion
 
-class HydrazinePlugin : Plugin<Project> {
+class TinyProtocolPlugin : Plugin<Project> {
     override fun apply(target: Project) {
-        val extension: HydrazinePluginExtension = target.extensions.create("hydrazine", HydrazinePluginExtension::class.java)
+        val extension: TinyProtocolPluginExtension = target.extensions.create("protocol", TinyProtocolPluginExtension::class.java)
         if (!target.plugins.hasPlugin(JavaPlugin::class.java)) {
             target.plugins.apply(JavaPlugin::class.java)
         }

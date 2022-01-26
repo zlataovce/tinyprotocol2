@@ -1,4 +1,4 @@
-package me.kcra.hydrazine.utils
+package me.kcra.tinyprotocol.utils
 
 import me.kcra.acetylene.core.utils.Identifier
 

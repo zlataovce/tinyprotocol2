@@ -1,4 +1,4 @@
-package me.kcra.hydrazine.tasks
+package me.kcra.tinyprotocol.tasks
 
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.squareup.javapoet.*
@@ -7,10 +7,10 @@ import me.kcra.acetylene.core.TypedDescriptableMapping
 import me.kcra.acetylene.core.TypedMappingFile
 import me.kcra.acetylene.core.ancestry.ClassAncestorTree
 import me.kcra.acetylene.core.ancestry.DescriptableAncestorTree
-import me.kcra.hydrazine.HydrazinePluginExtension
-import me.kcra.hydrazine.utils.MAPPER
-import me.kcra.hydrazine.utils.MappingType
-import me.kcra.hydrazine.utils.ProtocolData
+import me.kcra.tinyprotocol.TinyProtocolPluginExtension
+import me.kcra.tinyprotocol.utils.MAPPER
+import me.kcra.tinyprotocol.utils.MappingType
+import me.kcra.tinyprotocol.utils.ProtocolData
 import org.gradle.api.DefaultTask
 import org.gradle.api.logging.LogLevel
 import org.gradle.api.tasks.Internal
@@ -28,7 +28,7 @@ import java.util.stream.Collectors
 import javax.inject.Inject
 import javax.lang.model.element.Modifier
 
-abstract class GeneratePacketsTask @Inject constructor(private val extension: HydrazinePluginExtension, private val sourceSet: SourceSet) : DefaultTask() {
+abstract class GeneratePacketsTask @Inject constructor(private val extension: TinyProtocolPluginExtension, private val sourceSet: SourceSet) : DefaultTask() {
     @get:Internal
     internal abstract var mappings: List<TypedMappingFile>
 
@@ -37,7 +37,7 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
     }
 
     init {
-        group = "hydrazine"
+        group = "protocol"
         description = "Generates the selected packet wrappers."
     }
 
@@ -55,9 +55,9 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
             val className: String = tree.classes[0].mappings[0].value().replace('/', '.')
             val builder: TypeSpec.Builder = TypeSpec.classBuilder("W" + className.substring(className.lastIndexOf('.') + 1))
                 .addModifiers(Modifier.PUBLIC)
-                .addSuperinterface(ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "Packet"))
+                .addSuperinterface(ClassName.get(extension.utilsPackageName ?: "me.kcra.tinyprotocol.utils", "Packet"))
                 .addAnnotation(
-                    AnnotationSpec.builder(ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "Reobfuscate"))
+                    AnnotationSpec.builder(ClassName.get(extension.utilsPackageName ?: "me.kcra.tinyprotocol.utils", "Reobfuscate"))
                         .addMember("value", "\$S", joinMappings(tree, protocolList))
                         .also { annotationBuilder ->
                             // limited support
@@ -88,7 +88,7 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
                     FieldSpec.builder(if (type.startsWith("java") || primitiveTypes.contains(type)) bestGuess(type) else ClassName.OBJECT, mappings1[0])
                         .addModifiers(Modifier.PRIVATE)
                         .addAnnotation(
-                            AnnotationSpec.builder(ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "Reobfuscate"))
+                            AnnotationSpec.builder(ClassName.get(extension.utilsPackageName ?: "me.kcra.tinyprotocol.utils", "Reobfuscate"))
                                 .addMember("value", "\$S", joinMappings(fieldTree, protocolList))
                                 .also { annotationBuilder ->
                                     // limited support
@@ -103,8 +103,8 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
                         )
                 )
             }
-            val reflectClass: ClassName = ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "Reflect")
-            val mappingUtilsClass: ClassName = ClassName.get(extension.utilsPackageName ?: "me.kcra.hydrazine.utils", "MappingUtils")
+            val reflectClass: ClassName = ClassName.get(extension.utilsPackageName ?: "me.kcra.tinyprotocol.utils", "Reflect")
+            val mappingUtilsClass: ClassName = ClassName.get(extension.utilsPackageName ?: "me.kcra.tinyprotocol.utils", "MappingUtils")
             // toNMS method
             builder.addMethod(
                 MethodSpec.methodBuilder("toNMS")
@@ -282,7 +282,7 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
     }
 
     private fun copyTemplateClass(name: String) {
-        val utilPackage = extension.utilsPackageName ?: "me.kcra.hydrazine.utils"
+        val utilPackage = extension.utilsPackageName ?: "me.kcra.tinyprotocol.utils"
         val path: Path = Path.of(sourceSet.java.srcDirs.first().absolutePath, utilPackage.replace('.', File.separatorChar), "$name.java")
             .also { it.parent.toFile().mkdirs() }
         Files.copy(javaClass.getResourceAsStream("/templates/$name.java")!!, path, StandardCopyOption.REPLACE_EXISTING)
