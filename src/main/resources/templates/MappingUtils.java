@@ -22,7 +22,7 @@ public final class MappingUtils {
         for (int i = 0; i < parts.length; i++) {
             final String[] sides = parts[i].split("=");
             mappings.computeIfAbsent(sides[1].replace('/', '.'), key -> new ArrayList<>())
-                    .addAll(Arrays.asList(sides[0].split(",")).stream().map(Integer::parseInt).collect(Collectors.toList()));
+                    .addAll(Arrays.stream(sides[0].split(",")).map(Integer::parseInt).collect(Collectors.toList()));
         }
         final Map<String, List<Integer>> finalizedMap = Collections.unmodifiableMap(mappings);
         CACHE.computeIfAbsent(packetName, key -> new ConcurrentHashMap<>()).put(mapping, finalizedMap);

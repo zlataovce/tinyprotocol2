@@ -78,6 +78,10 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
                 val mappings1: List<String> = field.mappings.stream().map { it.value().key() }.toList()
                 val fieldTree: DescriptableAncestorTree = tree.fieldAncestors(mappings1)
                 logger.log(LogLevel.INFO, "Mapped ${fieldTree.size()} version(s) of friendly mapping ${mappings1.joinToString(",")}.")
+                @Suppress("SENSELESS_COMPARISON")  // need this here, because searge inconsistencies
+                if (field.descriptor == null) {
+                    continue
+                }
                 val type: String = convertType(field.descriptor)
                 logger.log(LogLevel.INFO, "Creating field ${field.mapped()}, is JDK type: ${(type.startsWith("java") || primitiveTypes.contains(type))}")
                 builder.createField(
@@ -139,6 +143,43 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
                         }
                     } }
                     .addStatement("return nmsPacket")
+                    .build()
+            )
+            // fromNMS method
+            builder.addMethod(
+                MethodSpec.methodBuilder("fromNMS")
+                    .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+                    .returns(currentClassName)
+                    .addParameter(ClassName.OBJECT, "raw")
+                    .addParameter(ClassName.INT, "ver")
+                    .addStatement("final String name = \$T.class.getSimpleName()", currentClassName)
+                    .also { methodBuilder -> builder.fieldSpecs.forEach { field ->
+                        val reobfAnnotation: AnnotationSpec = field.annotations.stream()
+                            .filter { it.type is ClassName && (it.type as ClassName).simpleName().equals("Reobfuscate") }
+                            .findFirst()
+                            .orElseThrow { RuntimeException("Could not find @Reobfuscate annotation for field ${field.name}") }
+                        val min: Int = reobfAnnotation.members["min"]?.get(0)?.toString()?.toInt() ?: -1
+                        val max: Int = reobfAnnotation.members["max"]?.get(0)?.toString()?.toInt() ?: -1
+                        if (min != -1 && max != -1) {
+                            methodBuilder.addStatement("\$T ${field.name} = null", field.type)
+                                .beginControlFlow("if (ver < \$L && ver > \$L)", max, min)
+                                .addStatement("${field.name} = (\$T) \$T.getFieldSafe(raw, \$T.findMapping(name, \$T.getField(\$T.class, \$S), ver))", field.type, reflectClass, mappingUtilsClass, reflectClass, currentClassName, field.name)
+                                .endControlFlow()
+                        } else if (min != -1) {
+                            methodBuilder.addStatement("\$T ${field.name} = null", field.type)
+                                .beginControlFlow("if (ver >= \$L)", min)
+                                .addStatement("${field.name} = (\$T) \$T.getFieldSafe(raw, \$T.findMapping(name, \$T.getField(\$T.class, \$S), ver))", field.type, reflectClass, mappingUtilsClass, reflectClass, currentClassName, field.name)
+                                .endControlFlow()
+                        } else if (max != -1) {
+                            methodBuilder.addStatement("\$T ${field.name} = null", field.type)
+                                .beginControlFlow("if (ver <= \$L)", max)
+                                .addStatement("${field.name} = (\$T) \$T.getFieldSafe(raw, \$T.findMapping(name, \$T.getField(\$T.class, \$S), ver))", field.type, reflectClass, mappingUtilsClass, reflectClass, currentClassName, field.name)
+                                .endControlFlow()
+                        } else {
+                            methodBuilder.addStatement("final \$T ${field.name} = (\$T) \$T.getFieldSafe(raw, \$T.findMapping(name, \$T.getField(\$T.class, \$S), ver))", field.type, field.type, reflectClass, mappingUtilsClass, reflectClass, currentClassName, field.name)
+                        }
+                    } }
+                    .addStatement("return new \$T(${builder.fieldSpecs.stream().map { it.name }.collect(Collectors.joining(", "))})", currentClassName)
                     .build()
             )
 
@@ -281,16 +322,17 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Hy
     }
 
     private fun walkFields(tree: ClassAncestorTree): List<TypedDescriptableMapping> {
+        val mappingSet: MutableSet<String> = mutableSetOf()
         val fields: MutableList<TypedDescriptableMapping> = mutableListOf()
         for (clazz: TypedClassMapping in tree.classes) {
             fields.addAll(
                 clazz.fields.stream()
                     .filter { f ->
-                        fields.stream().noneMatch { f1 ->
-                            !Collections.disjoint(
-                                f.mappings.stream().map { it.value().key() }.toList(),
-                                f1.mappings.stream().map { it.value().key() }.toList()
-                            )
+                        val mapStr: List<String> = f.mappings.stream().map { it.value().key() }.toList()
+                        return@filter Collections.disjoint(mapStr, mappingSet).also { disjoint ->
+                            if (disjoint) {
+                                mappingSet.addAll(mapStr)
+                            }
                         }
                     }
                     .toList()
