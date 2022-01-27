@@ -5,7 +5,7 @@ abstract class TinyProtocolPluginExtension {
     internal val versions: MutableMap<String, Int> = mutableMapOf()
     var sourceSet: String = "generated"
     var packageName: String? = null
-    var utilsPackageName: String? = null
+    var utilsPackageName: String = "me.kcra.tinyprotocol.utils"
     var mutable: Boolean = false
     var verifyChecksums: Boolean = true
 

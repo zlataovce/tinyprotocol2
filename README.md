@@ -21,7 +21,7 @@ protocol {
     // optional settings
     sourceSet = "generated" // the source set name, defaults to "generated"
     packageName = null // the packet package name, defaults to mojang-mapped package name
-    utilsPackageName = null // the utils package name, defaults to "me.kcra.tinyprotocol.utils"
+    utilsPackageName = "me.kcra.tinyprotocol.utils" // the utils package name, defaults to "me.kcra.tinyprotocol.utils"
     mutable = false // the mutability of the packets (setters, final fields), defaults to false
     // mapping checksum verification, defaults to true, setting this to false may cause unexpected errors
     // but marginally improves build performance (some mappings don't have checksums and are re-downloaded every time)

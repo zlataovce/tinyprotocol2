@@ -62,9 +62,9 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
             val className: String = tree.classes[0].mappings[0].value().replace('/', '.')
             val builder: TypeSpec.Builder = TypeSpec.classBuilder("W" + className.substring(className.lastIndexOf('.') + 1))
                 .addModifiers(Modifier.PUBLIC)
-                .addSuperinterface(ClassName.get(extension.utilsPackageName ?: "me.kcra.tinyprotocol.utils", "Packet"))
+                .addSuperinterface(ClassName.get(extension.utilsPackageName, "Packet"))
                 .addAnnotation(
-                    AnnotationSpec.builder(ClassName.get(extension.utilsPackageName ?: "me.kcra.tinyprotocol.utils", "Reobfuscate"))
+                    AnnotationSpec.builder(ClassName.get(extension.utilsPackageName, "Reobfuscate"))
                         .addMember("value", "\$S", joinMappings(tree, protocolList))
                         .also { annotationBuilder ->
                             // limited support
@@ -95,7 +95,7 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                     FieldSpec.builder(if (type.startsWith("java") || primitiveTypes.contains(type)) bestGuess(type) else ClassName.OBJECT, mappings1[0])
                         .addModifiers(Modifier.PRIVATE)
                         .addAnnotation(
-                            AnnotationSpec.builder(ClassName.get(extension.utilsPackageName ?: "me.kcra.tinyprotocol.utils", "Reobfuscate"))
+                            AnnotationSpec.builder(ClassName.get(extension.utilsPackageName, "Reobfuscate"))
                                 .addMember("value", "\$S", joinMappings(fieldTree, protocolList))
                                 .also { annotationBuilder ->
                                     // limited support
@@ -110,8 +110,8 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                         )
                 )
             }
-            val reflectClass: ClassName = ClassName.get(extension.utilsPackageName ?: "me.kcra.tinyprotocol.utils", "Reflect")
-            val mappingUtilsClass: ClassName = ClassName.get(extension.utilsPackageName ?: "me.kcra.tinyprotocol.utils", "MappingUtils")
+            val reflectClass: ClassName = ClassName.get(extension.utilsPackageName, "Reflect")
+            val mappingUtilsClass: ClassName = ClassName.get(extension.utilsPackageName, "MappingUtils")
             // toNMS method
             builder.addMethod(
                 MethodSpec.methodBuilder("toNMS")
@@ -289,11 +289,10 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
     }
 
     private fun copyTemplateClass(name: String) {
-        val utilPackage = extension.utilsPackageName ?: "me.kcra.tinyprotocol.utils"
-        val path: Path = Path.of(sourceSet.java.srcDirs.first().absolutePath, utilPackage.replace('.', File.separatorChar), "$name.java")
+        val path: Path = Path.of(sourceSet.java.srcDirs.first().absolutePath, extension.utilsPackageName.replace('.', File.separatorChar), "$name.java")
             .also { it.parent.toFile().mkdirs() }
         Files.copy(javaClass.getResourceAsStream("/templates/$name.java")!!, path, StandardCopyOption.REPLACE_EXISTING)
-        Files.writeString(path, "package $utilPackage;\n\n" + Files.readString(path, StandardCharsets.UTF_8).replace("{utilPackage}", utilPackage))
+        Files.writeString(path, "package ${extension.utilsPackageName};\n\n" + Files.readString(path, StandardCharsets.UTF_8).replace("{utilPackage}", extension.utilsPackageName))
     }
 
     private fun joinMappings(tree: ClassAncestorTree, protocolVersions: List<Int>): String {
