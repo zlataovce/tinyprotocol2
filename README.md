@@ -13,7 +13,7 @@ plugins {
 protocol {
     version("1.18.1") // you can specify multiple target versions
     // you can manually specify a protocol version
-    // if the PrismarineJS hasn't been updated for your version yet
+    // if the PrismarineJS repo hasn't been updated for your version yet
     version("1.18", 757)
     
     packet("net/minecraft/network/protocol/game/ClientboundAddMobPacket") // you can specify multiple packets
