@@ -11,6 +11,7 @@ import me.kcra.tinyprotocol.TinyProtocolPluginExtension
 import me.kcra.tinyprotocol.utils.MAPPER
 import me.kcra.tinyprotocol.utils.MappingType
 import me.kcra.tinyprotocol.utils.ProtocolData
+import me.kcra.tinyprotocol.utils.isUpperCase
 import org.gradle.api.DefaultTask
 import org.gradle.api.logging.LogLevel
 import org.gradle.api.tasks.Internal
@@ -35,6 +36,17 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
 
     companion object {
         private val primitiveTypes: List<String> = listOf("int", "void", "long", "float", "double", "boolean", "short", "byte", "char")
+        private val primitiveToWrapper: Map<String, String> = mapOf(
+            Pair("int", "java.lang.Integer"),
+            Pair("void", "java.lang.Void"),
+            Pair("long", "java.lang.Long"),
+            Pair("float", "java.lang.Float"),
+            Pair("double", "java.lang.Double"),
+            Pair("boolean", "java.lang.Boolean"),
+            Pair("short", "java.lang.Short"),
+            Pair("byte", "java.lang.Byte"),
+            Pair("char", "java.lang.Character")
+        )
     }
 
     init {
@@ -90,6 +102,10 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
             val currentClassName: ClassName = ClassName.get(extension.packageName ?: className.substring(0, className.lastIndexOf('.')), "W" + className.substring(className.lastIndexOf('.') + 1))
             // fields
             for (field: TypedDescriptableMapping in walkFields(tree)) {
+                val mojangMapping: String? = field.mapped(MappingType.MOJANG)
+                if (mojangMapping != null && isUpperCase(mojangMapping)) { // probably some constant
+                    continue
+                }
                 val mappings1: List<String> = field.mappings.stream().map { it.value().key() }.toList()
                 val fieldTree: DescriptableAncestorTree = tree.fieldAncestors(mappings1)
                 logger.log(LogLevel.INFO, "Mapped ${fieldTree.size()} version(s) of friendly mapping ${mappings1.joinToString(",")}.")
@@ -100,7 +116,15 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                 val type: String = convertType(field.descriptor)
                 logger.log(LogLevel.INFO, "Creating field ${field.mapped()}, is JDK type: ${(type.startsWith("java") || primitiveTypes.contains(type))}")
                 builder.createField(
-                    FieldSpec.builder(if (type.startsWith("java") || primitiveTypes.contains(type)) bestGuess(type) else ClassName.OBJECT, mappings1[0])
+                    FieldSpec.builder(type.let {
+                        if (type.startsWith("java") || primitiveTypes.contains(type)) {
+                            if (((fieldTree.offset > 0) || ((fieldTree.size() + fieldTree.offset) < mappings.size)) && primitiveTypes.contains(type)) {
+                                return@let bestGuess(primitiveToWrapper[type]!!)
+                            }
+                            return@let bestGuess(type)
+                        }
+                        return@let ClassName.OBJECT
+                    }, mappings1[0])
                         .addModifiers(Modifier.PRIVATE)
                         .addAnnotation(
                             AnnotationSpec.builder(ClassName.get(extension.utilsPackageName, "Reobfuscate"))
@@ -210,7 +234,7 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                     .build()
             )
 
-            // required args constructor
+            // constructors
             logger.log(LogLevel.INFO, "Creating constructor...")
             builder.addMethod(
                 MethodSpec.constructorBuilder()
