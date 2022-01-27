@@ -62,7 +62,12 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
         val reflectClass: ClassName = ClassName.get(extension.utilsPackageName, "Reflect")
         val mappingUtilsClass: ClassName = ClassName.get(extension.utilsPackageName, "MappingUtils")
         val packetTree: ClassAncestorTree = ClassAncestorTree.of("net/minecraft/network/protocol/Packet", mappings)
-        val readMethodTree: DescriptableAncestorTree = packetTree.methodAncestors("read", "(Lnet/minecraft/network/FriendlyByteBuf;)V")
+        var readMethodTree: DescriptableAncestorTree? = null
+        try {
+            readMethodTree = packetTree.methodAncestors("read", "(Lnet/minecraft/network/FriendlyByteBuf;)V")
+        } catch (ignored: IllegalArgumentException) {
+            // ignored
+        }
         val writeMethodTree: DescriptableAncestorTree = packetTree.methodAncestors("write", "(Lnet/minecraft/network/FriendlyByteBuf;)V")
         val friendlyByteBufTree: ClassAncestorTree = ClassAncestorTree.of("net/minecraft/network/FriendlyByteBuf", mappings)
 
@@ -70,9 +75,6 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
             logger.log(LogLevel.INFO, "Creating packet wrapper of class $name...")
             val tree: ClassAncestorTree = ClassAncestorTree.of(name.replace('.', '/'), mappings)
             logger.log(LogLevel.INFO, "Mapped ${tree.size()} version(s) of mapping $name.")
-            if (tree.size() == 0) {
-                throw RuntimeException("Could not map class $name")
-            }
             val className: String = tree.classes[0].mappings[0].value().replace('/', '.')
             val builder: TypeSpec.Builder = TypeSpec.classBuilder("W" + className.substring(className.lastIndexOf('.') + 1))
                 .addModifiers(Modifier.PUBLIC)
@@ -224,15 +226,21 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                     .addAnnotation(AnnotationSpec.builder(ClassName.get("java.lang", "Override")).build())
                     .addStatement("final Class<?> nmsPacketClass = \$T.getClassSafe(\$T.findMapping(getClass(), ver))", reflectClass, mappingUtilsClass)
                     .addStatement("final Class<?> friendlyByteBufClass = \$T.getClassSafe(\$T.findMapping(getClass(), \$S, ver))", reflectClass, mappingUtilsClass, joinMappings(friendlyByteBufTree, protocolList))
-                    .addStatement("final String readMethodMapping = \$T.findMapping(getClass(), \$S, ver)", mappingUtilsClass, joinMappings(readMethodTree, protocolList))
-                    .beginControlFlow("if (readMethodMapping != null)")
-                    .addStatement("final Object nmsPacket = toNMS(ver)")
-                    .addStatement("final \$T readMethod = \$T.getMethodSafe(nmsPacket.getClass(), readMethodMapping, friendlyByteBufClass)", Method::class.java, reflectClass)
-                    .addStatement("\$T.fastInvoke(readMethod, nmsPacket, buf)", reflectClass)
-                    .addStatement("fromNMS(nmsPacket, ver)")
-                    .nextControlFlow("else")
-                    .addStatement("fromNMS(\$T.construct(nmsPacketClass, buf), ver)", reflectClass)
-                    .endControlFlow()
+                    .also { methodBuilder ->
+                        if (readMethodTree != null) {
+                            methodBuilder.addStatement("final String readMethodMapping = \$T.findMapping(getClass(), \$S, ver)", mappingUtilsClass, joinMappings(readMethodTree, protocolList))
+                                .beginControlFlow("if (readMethodMapping != null)")
+                                .addStatement("final Object nmsPacket = toNMS(ver)")
+                                .addStatement("final \$T readMethod = \$T.getMethodSafe(nmsPacket.getClass(), readMethodMapping, friendlyByteBufClass)", Method::class.java, reflectClass)
+                                .addStatement("\$T.fastInvoke(readMethod, nmsPacket, buf)", reflectClass)
+                                .addStatement("fromNMS(nmsPacket, ver)")
+                                .nextControlFlow("else")
+                                .addStatement("fromNMS(\$T.construct(nmsPacketClass, buf), ver)", reflectClass)
+                                .endControlFlow()
+                        } else {
+                            methodBuilder.addStatement("fromNMS(\$T.construct(nmsPacketClass, buf), ver)", reflectClass)
+                        }
+                    }
                     .build()
             )
             // write method
