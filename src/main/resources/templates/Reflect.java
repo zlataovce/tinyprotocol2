@@ -48,6 +48,31 @@ public final class Reflect {
         throw new RuntimeException("Could not construct " + clazz.getName());
     }
 
+    @SafeVarargs
+    public static Method getMethodSafe(Class<?> clazz, String name, Class<?>... args) {
+        Method method = null;
+        try {
+            method = clazz.getMethod(name, args);
+        } catch (Throwable ignored1) {
+            Class<?> clazz1 = clazz;
+            do {
+                try {
+                    method = clazz1.getDeclaredMethod(name, args);
+                } catch (Throwable ignored2) {
+                }
+            } while ((clazz1 = clazz1.getSuperclass()) != null && clazz1 != Object.class && method == null);
+        }
+        return method;
+    }
+
+    public static Object fastInvoke(Method method, Object instance, Object... args) {
+        try {
+            return method.invoke(instance, args);
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
     public static Field getField(Class<?> clazz, String name) {
         Field field = null;
         try {

@@ -1,4 +1,5 @@
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -39,6 +40,10 @@ public final class MappingUtils {
 
     public static String findMapping(Class<?> clazz, int ver) {
         return findMapping(unwrapMappings(clazz.getSimpleName(), clazz.getAnnotation({utilPackage}.Reobfuscate.class).value()), ver);
+    }
+
+    public static String findMapping(Class<?> clazz, String mapping, int ver) {
+        return findMapping(unwrapMappings(clazz.getSimpleName(), mapping), ver);
     }
 
     public static String findMapping(String packetName, Field field, int ver) {

@@ -18,6 +18,7 @@ import org.gradle.api.tasks.SourceSet
 import org.gradle.api.tasks.TaskAction
 import java.io.File
 import java.lang.reflect.Field
+import java.lang.reflect.Method
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -52,6 +53,13 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
     fun run() {
         val protocols: Map<String, Int> = protocolVersions()
         val protocolList: List<Int> = protocols.values.toList()
+
+        val reflectClass: ClassName = ClassName.get(extension.utilsPackageName, "Reflect")
+        val mappingUtilsClass: ClassName = ClassName.get(extension.utilsPackageName, "MappingUtils")
+        val writeMethodTree: DescriptableAncestorTree = ClassAncestorTree.of("net/minecraft/network/protocol/Packet", mappings)
+            .methodAncestors("write", "(Lnet/minecraft/network/FriendlyByteBuf;)V")
+        val friendlyByteBufTree: ClassAncestorTree = ClassAncestorTree.of("net/minecraft/network/FriendlyByteBuf", mappings)
+
         for (name: String in extension.packets) {
             logger.log(LogLevel.INFO, "Creating packet wrapper of class $name...")
             val tree: ClassAncestorTree = ClassAncestorTree.of(name.replace('.', '/'), mappings)
@@ -110,8 +118,6 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                         )
                 )
             }
-            val reflectClass: ClassName = ClassName.get(extension.utilsPackageName, "Reflect")
-            val mappingUtilsClass: ClassName = ClassName.get(extension.utilsPackageName, "MappingUtils")
             // toNMS method
             builder.addMethod(
                 MethodSpec.methodBuilder("toNMS")
@@ -187,6 +193,20 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                         }
                     } }
                     .addStatement("return new \$T(${builder.fieldSpecs.stream().map { it.name }.collect(Collectors.joining(", "))})", currentClassName)
+                    .build()
+            )
+            // write method
+            builder.addMethod(
+                MethodSpec.methodBuilder("write")
+                    .addModifiers(Modifier.PUBLIC)
+                    .addParameter(ClassName.OBJECT, "buf")
+                    .addParameter(ClassName.INT, "ver")
+                    .addAnnotation(AnnotationSpec.builder(ClassName.get("java.lang", "Override")).build())
+                    .addStatement("final Object nmsPacket = toNMS(ver)")
+                    .addStatement("final Class<?> friendlyByteBufClass = \$T.getClassSafe(\$T.findMapping(getClass(), \$S, ver))", reflectClass, mappingUtilsClass, joinMappings(friendlyByteBufTree, protocolList))
+                    .addStatement("final String writeMethodMapping = \$T.findMapping(getClass(), \$S, ver)", mappingUtilsClass, joinMappings(writeMethodTree, protocolList))
+                    .addStatement("final \$T writeMethod = \$T.getMethodSafe(nmsPacket.getClass(), writeMethodMapping, friendlyByteBufClass)", Method::class.java, reflectClass)
+                    .addStatement("\$T.fastInvoke(writeMethod, nmsPacket, buf)", reflectClass)
                     .build()
             )
 
