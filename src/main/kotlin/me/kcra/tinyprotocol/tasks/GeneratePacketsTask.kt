@@ -38,7 +38,14 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
 
     init {
         group = "protocol"
-        description = "Generates the selected packet wrappers."
+        description = "Generates selected packet wrappers."
+        outputs.upToDateWhen {
+            extension.packets.stream().allMatch {
+                val name: String = it.replace('.', '/')
+                val packageName: String = (extension.packageName ?: name.substring(0, name.lastIndexOf('/'))).replace('/', File.separatorChar)
+                Path.of(sourceSet.java.srcDirs.first().absolutePath, packageName, "W" + name.substring(name.lastIndexOf('/') + 1)).toFile().isFile
+            }
+        }
     }
 
     @TaskAction
@@ -47,7 +54,7 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
         val protocolList: List<Int> = protocols.values.toList()
         for (name: String in extension.packets) {
             logger.log(LogLevel.INFO, "Creating packet wrapper of class $name...")
-            val tree: ClassAncestorTree = ClassAncestorTree.of(name, mappings)
+            val tree: ClassAncestorTree = ClassAncestorTree.of(name.replace('.', '/'), mappings)
             logger.log(LogLevel.INFO, "Mapped ${tree.size()} version(s) of mapping $name.")
             if (tree.size() == 0) {
                 throw RuntimeException("Could not map class $name")

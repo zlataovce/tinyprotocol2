@@ -1,5 +1,6 @@
 package me.kcra.tinyprotocol
 
+import me.kcra.tinyprotocol.tasks.CleanSourcesTask
 import me.kcra.tinyprotocol.tasks.PrepareMappingsTask
 import me.kcra.tinyprotocol.tasks.GeneratePacketsTask
 import org.gradle.api.Plugin
@@ -26,8 +27,12 @@ class TinyProtocolPlugin : Plugin<Project> {
         target.tasks.create("prepareMappings", PrepareMappingsTask::class.java, extension)
         target.tasks.create("generatePackets", GeneratePacketsTask::class.java, extension, sourceSet)
             .dependsOn("prepareMappings")
+        target.tasks.create("cleanSources", CleanSourcesTask::class.java, sourceSet)
+
         target.tasks.getByName("assemble")
             .dependsOn("generatePackets")
+        target.tasks.getByName("clean")
+            .dependsOn("cleanSources")
     }
 
     @Suppress("DEPRECATION")

@@ -15,7 +15,6 @@ import java.util.stream.Collectors
 import java.util.zip.ZipFile
 import kotlin.experimental.and
 
-
 val MAPPER: ObjectMapper = jacksonObjectMapper()
 private val SHA_1 = MessageDigest.getInstance("SHA-1")
 
@@ -24,11 +23,13 @@ fun newFile(fileName: String, workFolder: File): File {
     return Path.of(workFolder.absolutePath, fileName).toFile()
 }
 
-fun getFromURL(urlS: String, fileName: String, workFolder: File, sha1: String?): File? {
+fun getFromURL(urlS: String, fileName: String, workFolder: File, sha1: String?, verifyChecksums: Boolean): File? {
     val downloadedFile: File = newFile(fileName, workFolder)
     val url = URL(urlS)
     if (downloadedFile.isFile) {
-        if (sha1 != null) {
+        if (!verifyChecksums) {
+            return downloadedFile
+        } else if (sha1 != null) {
             if (getFileChecksum(SHA_1, downloadedFile) == sha1) {
                 return downloadedFile
             }
@@ -59,7 +60,7 @@ fun getStringFromURL(url: String): String? {
     return null
 }
 
-fun minecraftResource(ver: String, res: String, workFolder: File): File? {
+fun minecraftResource(ver: String, res: String, workFolder: File, verifyChecksums: Boolean): File? {
     val manifest: JsonNode = MAPPER.readTree(URL("https://launchermeta.mojang.com/mc/game/version_manifest.json"))
     for (jsonNode in manifest.path("versions")) {
         if (jsonNode.get("id").asText().equals(ver)) {
@@ -68,7 +69,8 @@ fun minecraftResource(ver: String, res: String, workFolder: File): File? {
                 return getFromURL(
                     versionManifest.path("downloads").path(res).get("url").asText(),
                     res + "_" + ver + ".res", workFolder,
-                    versionManifest.path("downloads").path(res).get("sha1").asText()
+                    versionManifest.path("downloads").path(res).get("sha1").asText(),
+                    verifyChecksums
                 )
             }
         }
@@ -76,13 +78,13 @@ fun minecraftResource(ver: String, res: String, workFolder: File): File? {
     return null
 }
 
-fun seargeMapping(ver: String, workFolder: File): InputStream? {
-    return seargeMapping0("https://maven.minecraftforge.net/de/oceanlabs/mcp/mcp_config/$ver/mcp_config-$ver.zip", ver, workFolder)
-        ?: seargeMapping0("https://maven.minecraftforge.net/de/oceanlabs/mcp/mcp/$ver/mcp-$ver-srg.zip", ver, workFolder)
+fun seargeMapping(ver: String, workFolder: File, verifyChecksums: Boolean): InputStream? {
+    return seargeMapping0("https://maven.minecraftforge.net/de/oceanlabs/mcp/mcp_config/$ver/mcp_config-$ver.zip", ver, workFolder, verifyChecksums)
+        ?: seargeMapping0("https://maven.minecraftforge.net/de/oceanlabs/mcp/mcp/$ver/mcp-$ver-srg.zip", ver, workFolder, verifyChecksums)
 }
 
-private fun seargeMapping0(url: String, ver: String, workFolder: File): InputStream? {
-    val file: File = getFromURL(url, "mcp_$ver.zip", workFolder, getStringFromURL("$url.sha1")) ?: return null
+private fun seargeMapping0(url: String, ver: String, workFolder: File, verifyChecksums: Boolean): InputStream? {
+    val file: File = getFromURL(url, "mcp_$ver.zip", workFolder, getStringFromURL("$url.sha1"), verifyChecksums) ?: return null
     val zipFile = ZipFile(file)
     return zipFile.getInputStream(
         zipFile.stream()
@@ -92,10 +94,10 @@ private fun seargeMapping0(url: String, ver: String, workFolder: File): InputStr
     )
 }
 
-fun intermediaryMapping(ver: String, workFolder: File): File? =
-    getFromURL("https://raw.githubusercontent.com/FabricMC/intermediary/master/mappings/$ver.tiny", "$ver.tiny", workFolder, null)
+fun intermediaryMapping(ver: String, workFolder: File, verifyChecksums: Boolean): File? =
+    getFromURL("https://raw.githubusercontent.com/FabricMC/intermediary/master/mappings/$ver.tiny", "$ver.tiny", workFolder, null, verifyChecksums)
 
-fun spigotMapping(ver: String, workFolder: File): File? {
+fun spigotMapping(ver: String, workFolder: File, verifyChecksums: Boolean): File? {
     val versionManifest: JsonNode = try {
         MAPPER.readTree(URL("https://hub.spigotmc.org/versions/$ver.json"))
     } catch (ignored: FileNotFoundException) {
@@ -110,7 +112,8 @@ fun spigotMapping(ver: String, workFolder: File): File? {
                 .asText().toString() + "?at=$buildDataRev",
             "spigot_$ver.csrg",
             workFolder,
-            null
+            null,
+            verifyChecksums
         )
     } else null
 }

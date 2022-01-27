@@ -27,10 +27,10 @@ abstract class PrepareMappingsTask @Inject constructor(private val extension: Ti
             files.add(
                 SrgUtilsMappingLoader.of(
                     // order matters
-                    Pair.of(MappingType.MOJANG, minecraftResource(ver, "server_mappings", workFolder)?.let { IMappingFile.load(it).reverse() }),
-                    Pair.of(MappingType.INTERMEDIARY, intermediaryMapping(ver, workFolder)),
-                    Pair.of(MappingType.SEARGE, seargeMapping(ver, workFolder)?.let { IMappingFile.load(it) }),
-                    Pair.of(MappingType.SPIGOT, spigotMapping(ver, workFolder))
+                    Pair.of(MappingType.MOJANG, minecraftResource(ver, "server_mappings", workFolder, extension.verifyChecksums)?.let { IMappingFile.load(it).reverse() }),
+                    Pair.of(MappingType.INTERMEDIARY, intermediaryMapping(ver, workFolder, extension.verifyChecksums)),
+                    Pair.of(MappingType.SEARGE, seargeMapping(ver, workFolder, extension.verifyChecksums)?.let { IMappingFile.load(it) }),
+                    Pair.of(MappingType.SPIGOT, spigotMapping(ver, workFolder, extension.verifyChecksums))
                 ).loadTyped()
             )
             logger.log(LogLevel.LIFECYCLE, "Loaded mappings for $ver.")
