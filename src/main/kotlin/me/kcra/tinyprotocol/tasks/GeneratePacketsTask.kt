@@ -52,13 +52,6 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
     init {
         group = "protocol"
         description = "Generates selected packet wrappers."
-        outputs.upToDateWhen {
-            extension.packets.stream().allMatch {
-                val name: String = it.replace('.', '/')
-                val packageName: String = (extension.packageName ?: name.substring(0, name.lastIndexOf('/'))).replace('/', File.separatorChar)
-                Path.of(sourceSet.java.srcDirs.first().absolutePath, packageName, "W" + name.substring(name.lastIndexOf('/') + 1)).toFile().isFile
-            }
-        }
     }
 
     @TaskAction
@@ -68,8 +61,9 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
 
         val reflectClass: ClassName = ClassName.get(extension.utilsPackageName, "Reflect")
         val mappingUtilsClass: ClassName = ClassName.get(extension.utilsPackageName, "MappingUtils")
-        val writeMethodTree: DescriptableAncestorTree = ClassAncestorTree.of("net/minecraft/network/protocol/Packet", mappings)
-            .methodAncestors("write", "(Lnet/minecraft/network/FriendlyByteBuf;)V")
+        val packetTree: ClassAncestorTree = ClassAncestorTree.of("net/minecraft/network/protocol/Packet", mappings)
+        val readMethodTree: DescriptableAncestorTree = packetTree.methodAncestors("read", "(Lnet/minecraft/network/FriendlyByteBuf;)V")
+        val writeMethodTree: DescriptableAncestorTree = packetTree.methodAncestors("write", "(Lnet/minecraft/network/FriendlyByteBuf;)V")
         val friendlyByteBufTree: ClassAncestorTree = ClassAncestorTree.of("net/minecraft/network/FriendlyByteBuf", mappings)
 
         for (name: String in extension.packets) {
@@ -140,6 +134,12 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                                 }
                                 .build()
                         )
+                        .also { fieldBuilder ->
+                            if ((fieldTree.offset > 0) || ((fieldTree.size() + fieldTree.offset) < mappings.size)) {
+                                fieldBuilder.initializer("null")
+                            }
+                        }
+                        .build()
                 )
             }
             // toNMS method
@@ -185,11 +185,11 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
             // fromNMS method
             builder.addMethod(
                 MethodSpec.methodBuilder("fromNMS")
-                    .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
-                    .returns(currentClassName)
+                    .addModifiers(Modifier.PUBLIC)
                     .addParameter(ClassName.OBJECT, "raw")
                     .addParameter(ClassName.INT, "ver")
-                    .addStatement("final String name = \$T.class.getSimpleName()", currentClassName)
+                    .addAnnotation(AnnotationSpec.builder(ClassName.get("java.lang", "Override")).build())
+                    .addStatement("final String name = getClass().getSimpleName()")
                     .also { methodBuilder -> builder.fieldSpecs.forEach { field ->
                         val reobfAnnotation: AnnotationSpec = field.annotations.stream()
                             .filter { it.type is ClassName && (it.type as ClassName).simpleName().equals("Reobfuscate") }
@@ -198,25 +198,41 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                         val min: Int = reobfAnnotation.members["min"]?.get(0)?.toString()?.toInt() ?: -1
                         val max: Int = reobfAnnotation.members["max"]?.get(0)?.toString()?.toInt() ?: -1
                         if (min != -1 && max != -1) {
-                            methodBuilder.addStatement("\$T ${field.name} = null", field.type)
-                                .beginControlFlow("if (ver < \$L && ver > \$L)", max, min)
-                                .addStatement("${field.name} = (\$T) \$T.getFieldSafe(raw, \$T.findMapping(name, \$T.getField(\$T.class, \$S), ver))", field.type, reflectClass, mappingUtilsClass, reflectClass, currentClassName, field.name)
+                            methodBuilder.beginControlFlow("if (ver < \$L && ver > \$L)", max, min)
+                                .addStatement("this.${field.name} = (\$T) \$T.getFieldSafe(raw, \$T.findMapping(name, \$T.getField(getClass(), \$S), ver))", field.type, reflectClass, mappingUtilsClass, reflectClass, field.name)
                                 .endControlFlow()
                         } else if (min != -1) {
-                            methodBuilder.addStatement("\$T ${field.name} = null", field.type)
-                                .beginControlFlow("if (ver >= \$L)", min)
-                                .addStatement("${field.name} = (\$T) \$T.getFieldSafe(raw, \$T.findMapping(name, \$T.getField(\$T.class, \$S), ver))", field.type, reflectClass, mappingUtilsClass, reflectClass, currentClassName, field.name)
+                            methodBuilder.beginControlFlow("if (ver >= \$L)", min)
+                                .addStatement("this.${field.name} = (\$T) \$T.getFieldSafe(raw, \$T.findMapping(name, \$T.getField(getClass(), \$S), ver))", field.type, reflectClass, mappingUtilsClass, reflectClass, field.name)
                                 .endControlFlow()
                         } else if (max != -1) {
-                            methodBuilder.addStatement("\$T ${field.name} = null", field.type)
-                                .beginControlFlow("if (ver <= \$L)", max)
-                                .addStatement("${field.name} = (\$T) \$T.getFieldSafe(raw, \$T.findMapping(name, \$T.getField(\$T.class, \$S), ver))", field.type, reflectClass, mappingUtilsClass, reflectClass, currentClassName, field.name)
+                            methodBuilder.beginControlFlow("if (ver <= \$L)", max)
+                                .addStatement("this.${field.name} = (\$T) \$T.getFieldSafe(raw, \$T.findMapping(name, \$T.getField(getClass(), \$S), ver))", field.type, reflectClass, mappingUtilsClass, reflectClass, field.name)
                                 .endControlFlow()
                         } else {
-                            methodBuilder.addStatement("final \$T ${field.name} = (\$T) \$T.getFieldSafe(raw, \$T.findMapping(name, \$T.getField(\$T.class, \$S), ver))", field.type, field.type, reflectClass, mappingUtilsClass, reflectClass, currentClassName, field.name)
+                            methodBuilder.addStatement("this.${field.name} = (\$T) \$T.getFieldSafe(raw, \$T.findMapping(name, \$T.getField(getClass(), \$S), ver))", field.type, reflectClass, mappingUtilsClass, reflectClass, field.name)
                         }
                     } }
-                    .addStatement("return new \$T(${builder.fieldSpecs.stream().map { it.name }.collect(Collectors.joining(", "))})", currentClassName)
+                    .build()
+            )
+            // read method
+            builder.addMethod(
+                MethodSpec.methodBuilder("read")
+                    .addModifiers(Modifier.PUBLIC)
+                    .addParameter(ClassName.OBJECT, "buf")
+                    .addParameter(ClassName.INT, "ver")
+                    .addAnnotation(AnnotationSpec.builder(ClassName.get("java.lang", "Override")).build())
+                    .addStatement("final Class<?> nmsPacketClass = \$T.getClassSafe(\$T.findMapping(getClass(), ver))", reflectClass, mappingUtilsClass)
+                    .addStatement("final Class<?> friendlyByteBufClass = \$T.getClassSafe(\$T.findMapping(getClass(), \$S, ver))", reflectClass, mappingUtilsClass, joinMappings(friendlyByteBufTree, protocolList))
+                    .addStatement("final String readMethodMapping = \$T.findMapping(getClass(), \$S, ver)", mappingUtilsClass, joinMappings(readMethodTree, protocolList))
+                    .beginControlFlow("if (readMethodMapping != null)")
+                    .addStatement("final Object nmsPacket = toNMS(ver)")
+                    .addStatement("final \$T readMethod = \$T.getMethodSafe(nmsPacket.getClass(), readMethodMapping, friendlyByteBufClass)", Method::class.java, reflectClass)
+                    .addStatement("\$T.fastInvoke(readMethod, nmsPacket, buf)", reflectClass)
+                    .addStatement("fromNMS(nmsPacket, ver)")
+                    .nextControlFlow("else")
+                    .addStatement("fromNMS(\$T.construct(nmsPacketClass, buf), ver)", reflectClass)
+                    .endControlFlow()
                     .build()
             )
             // write method
@@ -235,11 +251,27 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
             )
 
             // constructors
-            logger.log(LogLevel.INFO, "Creating constructor...")
+            logger.log(LogLevel.INFO, "Creating constructors...")
             builder.addMethod(
                 MethodSpec.constructorBuilder()
                     .addModifiers(Modifier.PUBLIC)
                     .also { builder.fieldSpecs.forEach { field -> it.addParameter(field.type, field.name).addStatement("this." + field.name + " = " + field.name) } }
+                    .build()
+            )
+            builder.addMethod(
+                MethodSpec.constructorBuilder()
+                    .addModifiers(Modifier.PUBLIC)
+                    .addParameter(ClassName.OBJECT, "raw")
+                    .addParameter(ClassName.INT, "ver")
+                    .addStatement("final Class<?> nmsPacketClass = \$T.getClassSafe(\$T.findMapping(getClass(), ver))", reflectClass, mappingUtilsClass)
+                    .addStatement("final Class<?> friendlyByteBufClass = \$T.getClassSafe(\$T.findMapping(getClass(), \$S, ver))", reflectClass, mappingUtilsClass, joinMappings(friendlyByteBufTree, protocolList))
+                    .beginControlFlow("if (nmsPacketClass.isInstance(raw))")
+                    .addStatement("fromNMS(raw, ver)")
+                    .nextControlFlow("else if (friendlyByteBufClass.isInstance(raw))")
+                    .addStatement("read(raw, ver)")
+                    .nextControlFlow("else")
+                    .addStatement("throw new IllegalArgumentException(\"Unsupported type provided for transformation\")")
+                    .endControlFlow()
                     .build()
             )
             JavaFile.builder(extension.packageName ?: className.substring(0, className.lastIndexOf('.')), builder.build())
@@ -293,16 +325,10 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
         return ClassName.bestGuess(name)
     }
 
-    private fun TypeSpec.Builder.createField(spec: FieldSpec.Builder): TypeSpec.Builder {
-        if (!extension.mutable) {
-            spec.addModifiers(Modifier.FINAL)
-        }
-        val field: FieldSpec = spec.build()
+    private fun TypeSpec.Builder.createField(field: FieldSpec): TypeSpec.Builder {
         addField(field)
         createGetter(field)
-        if (extension.mutable) {
-            createSetter(field)
-        }
+        createSetter(field)
         return this
     }
 

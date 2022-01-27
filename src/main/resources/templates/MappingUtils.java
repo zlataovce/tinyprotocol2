@@ -35,7 +35,7 @@ public final class MappingUtils {
                 .filter(e -> e.getValue().contains(ver))
                 .findFirst()
                 .map(Map.Entry::getKey)
-                .get();
+                .orElse(null);
     }
 
     public static String findMapping(Class<?> clazz, int ver) {

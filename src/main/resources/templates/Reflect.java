@@ -3,6 +3,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.Arrays;
 
 public final class Reflect {
     static {
@@ -46,6 +47,28 @@ public final class Reflect {
             }
         }
         throw new RuntimeException("Could not construct " + clazz.getName());
+    }
+
+    public static Object construct(Class<?> clazz, Object... args) {
+        final Class<?>[] argClasses = Arrays.stream(args)
+                .map(Object::getClass)
+                .toArray(Class[]::new);
+        Constructor<?> constructor = null;
+        try {
+            constructor = clazz.getConstructor(argClasses);
+        } catch (Throwable ignored1) {
+            Class<?> clazz1 = clazz;
+            do {
+                try {
+                    constructor = clazz1.getDeclaredConstructor(argClasses);
+                } catch (Throwable ignored2) {
+                }
+            } while ((clazz1 = clazz1.getSuperclass()) != null && clazz1 != Object.class && constructor == null);
+        }
+        if (constructor == null) {
+            throw new IllegalArgumentException("No constructor found");
+        }
+        return constructor.newInstance(args);
     }
 
     @SafeVarargs
