@@ -68,10 +68,13 @@ public final class Reflect {
         if (constructor == null) {
             throw new IllegalArgumentException("No constructor found");
         }
-        return constructor.newInstance(args);
+        try {
+            return constructor.newInstance(args);
+        } catch (Throwable ignored) {
+        }
+        return null;
     }
 
-    @SafeVarargs
     public static Method getMethodSafe(Class<?> clazz, String name, Class<?>... args) {
         Method method = null;
         try {
