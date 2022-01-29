@@ -7,6 +7,7 @@ abstract class TinyProtocolPluginExtension {
     var packageName: String? = null
     var utilsPackageName: String = "me.kcra.tinyprotocol.utils"
     var verifyChecksums: Boolean = true
+    var generateMetadata: Boolean = false
 
     fun packet(vararg def: String) = packets.addAll(def)
 

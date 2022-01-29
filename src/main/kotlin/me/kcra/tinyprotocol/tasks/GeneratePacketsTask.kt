@@ -109,7 +109,7 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                 if (field.descriptor == null) {
                     continue
                 }
-                val type: String = convertType(field.descriptor)
+                val type: String = convertType(field.descriptor).replace("/", ".")
                 logger.log(LogLevel.INFO, "Creating field ${field.mapped()}, is JDK type: ${(type.startsWith("java") || primitiveTypes.contains(type))}")
                 builder.createField(
                     FieldSpec.builder(type.let {
@@ -122,6 +122,19 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                         return@let ClassName.OBJECT
                     }, mappings1[0])
                         .addModifiers(Modifier.PRIVATE)
+                        .also { fieldBuilder ->
+                            if ((fieldTree.offset > 0) || ((fieldTree.size() + fieldTree.offset) < mappings.size)) {
+                                fieldBuilder.initializer("null")
+                            }
+                            val fieldType: TypeName = fieldBuilder.javaClass.getDeclaredField("type").also { it.trySetAccessible() }.get(fieldBuilder) as TypeName
+                            if (fieldType == ClassName.OBJECT && extension.generateMetadata) {
+                                fieldBuilder.addAnnotation(
+                                    AnnotationSpec.builder(ClassName.get(extension.utilsPackageName, "Metadata"))
+                                        .addMember("externalType", "\$S", convertType(field.mappings[0].value().value()))
+                                        .build()
+                                )
+                            }
+                        }
                         .addAnnotation(
                             AnnotationSpec.builder(ClassName.get(extension.utilsPackageName, "Reobfuscate"))
                                 .addMember("value", "\$S", joinMappings(fieldTree, protocolList))
@@ -136,11 +149,6 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                                 }
                                 .build()
                         )
-                        .also { fieldBuilder ->
-                            if ((fieldTree.offset > 0) || ((fieldTree.size() + fieldTree.offset) < mappings.size)) {
-                                fieldBuilder.initializer("null")
-                            }
-                        }
                         .build()
                 )
             }
@@ -287,6 +295,9 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                 .writeToFile(sourceSet.java.srcDirs.first())
             logger.log(LogLevel.LIFECYCLE, "Wrote ${currentClassName.simpleName()}.")
         }
+        if (extension.generateMetadata) {
+            copyTemplateClass("Metadata")
+        }
         copyTemplateClasses("Reflect", "Reobfuscate", "MappingUtils", "Packet")
     }
 
@@ -319,9 +330,9 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
             else -> if (type.startsWith("[")) {
                 convertType(type.substring(1)) + "[]"
             } else if (type.endsWith(";")) {
-                type.substring(1, type.length - 1).replace("/", ".")
+                type.substring(1, type.length - 1)
             } else {
-                type.substring(1).replace("/", ".")
+                type.substring(1)
             }
         }
     }
