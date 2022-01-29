@@ -11,7 +11,7 @@ version = "0.0.2-SNAPSHOT"
 repositories {
     mavenCentral()
     maven("https://repo.screamingsandals.org/public")
-    mavenLocal()
+    maven("https://repo.kcra.me/snapshots")
 }
 
 dependencies {
@@ -37,4 +37,17 @@ pluginBundle {
     website = "https://github.com/zlataovce/tinyprotocol2"
     vcsUrl = "https://github.com/zlataovce/tinyprotocol2.git"
     tags = listOf("minecraft", "obfuscation", "packet")
+}
+
+configure<PublishingExtension> {
+    repositories {
+        maven {
+            url = if ((project.version as String).endsWith("-SNAPSHOT")) uri("https://repo.kcra.me/snapshots")
+                else uri("https://repo.kcra.me/releases")
+            credentials {
+                username = System.getenv("REPO_USERNAME")
+                password = System.getenv("REPO_PASSWORD")
+            }
+        }
+    }
 }
