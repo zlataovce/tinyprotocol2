@@ -25,5 +25,6 @@ protocol {
     // mapping checksum verification, defaults to true, setting this to false may cause unexpected errors
     // but marginally improves build performance (some mappings don't have checksums and are re-downloaded every time)
     verifyChecksums = true
+    generateMetadata = false // generates a @Metadata annotation with additional information where available, defaults to false
 }
 ```
