@@ -2,16 +2,15 @@ package me.kcra.tinyprotocol.tasks
 
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.squareup.javapoet.*
-import me.kcra.acetylene.core.TypedClassMapping
 import me.kcra.acetylene.core.TypedDescriptableMapping
 import me.kcra.acetylene.core.TypedMappingFile
 import me.kcra.acetylene.core.ancestry.ClassAncestorTree
 import me.kcra.acetylene.core.ancestry.DescriptableAncestorTree
+import me.kcra.acetylene.core.utils.MappingUtils.*
 import me.kcra.tinyprotocol.TinyProtocolPluginExtension
 import me.kcra.tinyprotocol.utils.MAPPER
 import me.kcra.tinyprotocol.utils.MappingType
 import me.kcra.tinyprotocol.utils.ProtocolData
-import me.kcra.tinyprotocol.utils.isUpperCase
 import org.gradle.api.DefaultTask
 import org.gradle.api.logging.LogLevel
 import org.gradle.api.tasks.Internal
@@ -25,7 +24,6 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
-import java.util.*
 import java.util.stream.Collectors
 import javax.inject.Inject
 import javax.lang.model.element.Modifier
@@ -33,21 +31,6 @@ import javax.lang.model.element.Modifier
 abstract class GeneratePacketsTask @Inject constructor(private val extension: TinyProtocolPluginExtension, private val sourceSet: SourceSet) : DefaultTask() {
     @get:Internal
     internal abstract var mappings: List<TypedMappingFile>
-
-    companion object {
-        private val primitiveTypes: List<String> = listOf("int", "void", "long", "float", "double", "boolean", "short", "byte", "char")
-        private val primitiveToWrapper: Map<String, String> = mapOf(
-            Pair("int", "java.lang.Integer"),
-            Pair("void", "java.lang.Void"),
-            Pair("long", "java.lang.Long"),
-            Pair("float", "java.lang.Float"),
-            Pair("double", "java.lang.Double"),
-            Pair("boolean", "java.lang.Boolean"),
-            Pair("short", "java.lang.Short"),
-            Pair("byte", "java.lang.Byte"),
-            Pair("char", "java.lang.Character")
-        )
-    }
 
     init {
         group = "protocol"
@@ -97,9 +80,8 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                 )
             val currentClassName: ClassName = ClassName.get(extension.packageName ?: className.substring(0, className.lastIndexOf('.')), "W" + className.substring(className.lastIndexOf('.') + 1))
             // fields
-            for (field: TypedDescriptableMapping in walkFields(tree)) {
-                val mojangMapping: String? = field.mapped(MappingType.MOJANG)
-                if (mojangMapping != null && isUpperCase(mojangMapping)) { // probably some constant
+            for (field: TypedDescriptableMapping in tree.walkFields()) {
+                if (field.has(MappingType.MOJANG) && field.isConstant(MappingType.MOJANG)) {
                     continue
                 }
                 val mappings1: List<String> = field.mappings.stream().map { it.value().key() }.toList()
@@ -110,12 +92,12 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                     continue
                 }
                 val type: String = convertType(field.descriptor).replace("/", ".")
-                logger.log(LogLevel.INFO, "Creating field ${field.mapped()}, is JDK type: ${(type.startsWith("java") || primitiveTypes.contains(type))}")
+                logger.log(LogLevel.INFO, "Creating field ${field.mapped()}, is JDK type: ${(type.startsWith("java") || PRIMITIVE_TYPES.contains(type))}")
                 builder.createField(
                     FieldSpec.builder(type.let {
-                        if (type.startsWith("java") || primitiveTypes.contains(type)) {
-                            if (((fieldTree.offset > 0) || ((fieldTree.size() + fieldTree.offset) < mappings.size)) && primitiveTypes.contains(type)) {
-                                return@let bestGuess(primitiveToWrapper[type]!!)
+                        if (type.startsWith("java") || PRIMITIVE_TYPES.contains(type)) {
+                            if (((fieldTree.offset > 0) || ((fieldTree.size() + fieldTree.offset) < mappings.size)) && PRIMITIVE_TYPES.contains(type)) {
+                                return@let bestGuess(PRIMITIVE_WRAPPER[type]!!)
                             }
                             return@let bestGuess(type)
                         }
@@ -316,29 +298,8 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
         return versions
     }
 
-    private fun convertType(type: String): String {
-        return when (type) {
-            "B" -> "byte"
-            "C" -> "char"
-            "D" -> "double"
-            "F" -> "float"
-            "I" -> "int"
-            "J" -> "long"
-            "S" -> "short"
-            "Z" -> "boolean"
-            "V" -> "void"
-            else -> if (type.startsWith("[")) {
-                convertType(type.substring(1)) + "[]"
-            } else if (type.endsWith(";")) {
-                type.substring(1, type.length - 1)
-            } else {
-                type.substring(1)
-            }
-        }
-    }
-
     private fun bestGuess(name: String): ClassName {
-        if (primitiveTypes.contains(name)) {
+        if (PRIMITIVE_TYPES.contains(name)) {
             return ClassName.get("", name)
         }
         return ClassName.bestGuess(name)
@@ -414,25 +375,5 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
         return joined.entries.stream()
             .map { "${it.value.joinToString(",")}=${it.key}" }
             .collect(Collectors.joining("+"))
-    }
-
-    private fun walkFields(tree: ClassAncestorTree): List<TypedDescriptableMapping> {
-        val mappingSet: MutableSet<String> = mutableSetOf()
-        val fields: MutableList<TypedDescriptableMapping> = mutableListOf()
-        for (clazz: TypedClassMapping in tree.classes) {
-            fields.addAll(
-                clazz.fields.stream()
-                    .filter { f ->
-                        val mapStr: List<String> = f.mappings.stream().map { it.value().key() }.toList()
-                        return@filter Collections.disjoint(mapStr, mappingSet).also { disjoint ->
-                            if (disjoint) {
-                                mappingSet.addAll(mapStr)
-                            }
-                        }
-                    }
-                    .toList()
-            )
-        }
-        return fields
     }
 }

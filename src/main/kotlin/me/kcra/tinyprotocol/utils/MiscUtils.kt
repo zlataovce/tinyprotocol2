@@ -151,12 +151,3 @@ fun getContentLength(url: URL): Long {
     }
     return -1
 }
-
-fun isUpperCase(s: String): Boolean {
-    for (c: Char in s) {
-        if ("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".contains(c) && c.isLowerCase()) {
-            return false
-        }
-    }
-    return true
-}

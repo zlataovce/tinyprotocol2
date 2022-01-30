@@ -11,12 +11,12 @@ version = "0.0.2-SNAPSHOT"
 repositories {
     mavenCentral()
     maven("https://repo.screamingsandals.org/public")
-    maven("https://repo.kcra.me/snapshots")
+    maven("https://repo.kcra.me/releases")
 }
 
 dependencies {
     compileOnly(kotlin("stdlib"))
-    implementation("me.kcra.acetylene:srgutils:0.0.1-SNAPSHOT")
+    implementation("me.kcra.acetylene:srgutils:0.0.1")
     implementation("net.minecraftforge:srgutils:0.4.11-SNAPSHOT")
     implementation("com.squareup:javapoet:1.13.0")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.13.1")
@@ -50,4 +50,8 @@ configure<PublishingExtension> {
             }
         }
     }
+}
+
+configurations.all {
+    resolutionStrategy.cacheDynamicVersionsFor(0, "seconds")
 }
