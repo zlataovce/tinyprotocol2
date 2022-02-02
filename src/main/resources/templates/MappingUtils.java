@@ -3,7 +3,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public final class MappingUtils {
-    // [packet name, [mapping string, protocolVersions]]
+    // [packet name, [mapping string, [obfuscated mapping, protocolVersions]]]
     private static final Map<String, Map<String, Map<String, List<Integer>>>> CACHE = Collections.synchronizedMap(new HashMap<>());
 
     private MappingUtils() {
