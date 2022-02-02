@@ -6,6 +6,8 @@ import java.lang.reflect.Modifier;
 import java.util.Arrays;
 
 public final class Reflect {
+    public static final Object UNSAFE;
+
     static {
         try {
             final Method getModuleMethod = Class.class.getDeclaredMethod("getModule");
@@ -15,6 +17,13 @@ public final class Reflect {
             addOpensMethod.invoke(java_base, "java.lang.reflect", unnamed);
             addOpensMethod.invoke(java_base, "java.util", unnamed);
         } catch (Throwable ignored) {
+        }
+        try {
+            final Field theUnsafeField = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+            theUnsafeField.setAccessible(true);
+            UNSAFE = theUnsafeField.get(null);
+        } catch (Throwable ignored) {
+            UNSAFE = null;
         }
     }
 
@@ -26,7 +35,7 @@ public final class Reflect {
             return Class.forName(name);
         } catch (Throwable ignored) {
         }
-        throw new RuntimeException("Could not retrieve class " + name);
+        return null;
     }
 
     public static Object construct(Class<?> clazz) {
@@ -38,15 +47,15 @@ public final class Reflect {
             try {
                 return sun.reflect.ReflectionFactory.getReflectionFactory().newConstructorForSerialization(clazz, Object.class.getDeclaredConstructor()).newInstance();
             } catch (Throwable ignored1) {
-                try {
-                    final Field theUnsafeField = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
-                    theUnsafeField.setAccessible(true);
-                    return ((sun.misc.Unsafe) theUnsafeField.get(null)).allocateInstance(clazz);
-                } catch (Throwable ignored2) {
+                if (UNSAFE != null) {
+                    try {
+                        return ((sun.misc.Unsafe) UNSAFE).allocateInstance(clazz);
+                    } catch (Throwable ignored2) {
+                    }
                 }
             }
         }
-        throw new RuntimeException("Could not construct " + clazz.getName());
+        return null;
     }
 
     public static Object construct(Class<?> clazz, Object... args) {
@@ -66,7 +75,7 @@ public final class Reflect {
             } while ((clazz1 = clazz1.getSuperclass()) != null && clazz1 != Object.class && constructor == null);
         }
         if (constructor == null) {
-            throw new IllegalArgumentException("No constructor found");
+            return null;
         }
         try {
             return constructor.newInstance(args);
@@ -99,7 +108,7 @@ public final class Reflect {
         return null;
     }
 
-    public static Field getField(Class<?> clazz, String name) {
+    public static Field getFieldSafe(Class<?> clazz, String name) {
         Field field = null;
         try {
             field = clazz.getField(name);
@@ -115,9 +124,9 @@ public final class Reflect {
         return field;
     }
 
-    public static Object getFieldSafe(Object instance, String name) {
+    public static Object getField(Object instance, String name) {
         try {
-            return getField(instance.getClass(), name).get(instance);
+            return getFieldSafe(instance.getClass(), name).get(instance);
         } catch (Throwable ignored) {
         }
         return null;
@@ -146,16 +155,16 @@ public final class Reflect {
 
                         field.set(instance, value);
                     } catch (Throwable ignored2) {
-                        try {
-                            final Field theUnsafeField = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
-                            theUnsafeField.setAccessible(true);
-                            final sun.misc.Unsafe theUnsafe = (sun.misc.Unsafe) theUnsafeField.get(null);
+                        if (UNSAFE != null) {
+                            try {
+                                final sun.misc.Unsafe theUnsafe = (sun.misc.Unsafe) UNSAFE;
 
-                            final Object ufo = instance != null ? instance : theUnsafe.staticFieldBase(field);
-                            final long offset = instance != null ? theUnsafe.objectFieldOffset(field) : theUnsafe.staticFieldOffset(field);
+                                final Object ufo = instance != null ? instance : theUnsafe.staticFieldBase(field);
+                                final long offset = instance != null ? theUnsafe.objectFieldOffset(field) : theUnsafe.staticFieldOffset(field);
 
-                            theUnsafe.putObject(ufo, offset, value);
-                        } catch (Throwable ignored3) {
+                                theUnsafe.putObject(ufo, offset, value);
+                            } catch (Throwable ignored3) {
+                            }
                         }
                     }
                 }

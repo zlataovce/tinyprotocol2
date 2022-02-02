@@ -1,11 +1,10 @@
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public final class MappingUtils {
-    private static final Map<String, Map<String, Map<String, List<Integer>>>> CACHE = new ConcurrentHashMap<>();
+    // [packet name, [mapping string, protocolVersions]]
+    private static final Map<String, Map<String, Map<String, List<Integer>>>> CACHE = Collections.synchronizedMap(new HashMap<>());
 
     private MappingUtils() {
     }
@@ -22,12 +21,16 @@ public final class MappingUtils {
         final String[] parts = mapping.split("\\+");
         for (int i = 0; i < parts.length; i++) {
             final String[] sides = parts[i].split("=");
-            mappings.computeIfAbsent(sides[1].replace('/', '.'), key -> new ArrayList<>())
-                    .addAll(Arrays.stream(sides[0].split(",")).map(Integer::parseInt).collect(Collectors.toList()));
+            mappings.computeIfAbsent(sides[0].replace('/', '.'), key -> new ArrayList<>())
+                    .addAll(Arrays.stream(sides[1].split(",")).map(Integer::parseInt).collect(Collectors.toList()));
         }
-        final Map<String, List<Integer>> finalizedMap = Collections.unmodifiableMap(mappings);
-        CACHE.computeIfAbsent(packetName, key -> new ConcurrentHashMap<>()).put(mapping, finalizedMap);
-        return finalizedMap;
+        // finalizing protocol lists
+        final Iterator<Map.Entry<String, List<Integer>>> mappingIterator = mappings.entrySet().iterator();
+        while (mappingIterator.hasNext()) {
+            final Map.Entry<String, List<Integer>> entry = mappingIterator.next();
+            entry.setValue(Collections.unmodifiableList(entry.getValue()));
+        }
+        return CACHE.computeIfAbsent(packetName, key -> Collections.synchronizedMap(new HashMap<>())).put(mapping, Collections.unmodifiableMap(mappings));
     }
 
     public static String findMapping(Map<String, List<Integer>> unwrapped, int ver) {

@@ -153,21 +153,21 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                         val max: Int = reobfAnnotation.members["max"]?.get(0)?.toString()?.toInt() ?: -1
                         if (min != -1 && max != -1) {
                             methodBuilder.beginControlFlow("if (ver < \$L && ver > \$L)", max, min)
-                                .addStatement("final \$T ${field.name}Field = \$T.getField(nmsPacketClass, \$T.findMapping(name, \$T.getField(getClass(), \$S), ver))", Field::class.java, reflectClass, mappingUtilsClass, reflectClass, field.name)
+                                .addStatement("final \$T ${field.name}Field = \$T.getFieldSafe(nmsPacketClass, \$T.findMapping(name, \$T.getFieldSafe(getClass(), \$S), ver))", Field::class.java, reflectClass, mappingUtilsClass, reflectClass, field.name)
                                 .addStatement("\$T.setField(${field.name}Field, nmsPacket, ${field.name})", reflectClass)
                                 .endControlFlow()
                         } else if (min != -1) {
                             methodBuilder.beginControlFlow("if (ver >= \$L)", min)
-                                .addStatement("final \$T ${field.name}Field = \$T.getField(nmsPacketClass, \$T.findMapping(name, \$T.getField(getClass(), \$S), ver))", Field::class.java, reflectClass, mappingUtilsClass, reflectClass, field.name)
+                                .addStatement("final \$T ${field.name}Field = \$T.getFieldSafe(nmsPacketClass, \$T.findMapping(name, \$T.getFieldSafe(getClass(), \$S), ver))", Field::class.java, reflectClass, mappingUtilsClass, reflectClass, field.name)
                                 .addStatement("\$T.setField(${field.name}Field, nmsPacket, ${field.name})", reflectClass)
                                 .endControlFlow()
                         } else if (max != -1) {
                             methodBuilder.beginControlFlow("if (ver <= \$L)", max)
-                                .addStatement("final \$T ${field.name}Field = \$T.getField(nmsPacketClass, \$T.findMapping(name, \$T.getField(getClass(), \$S), ver))", Field::class.java, reflectClass, mappingUtilsClass, reflectClass, field.name)
+                                .addStatement("final \$T ${field.name}Field = \$T.getFieldSafe(nmsPacketClass, \$T.findMapping(name, \$T.getFieldSafe(getClass(), \$S), ver))", Field::class.java, reflectClass, mappingUtilsClass, reflectClass, field.name)
                                 .addStatement("\$T.setField(${field.name}Field, nmsPacket, ${field.name})", reflectClass)
                                 .endControlFlow()
                         } else {
-                            methodBuilder.addStatement("final \$T ${field.name}Field = \$T.getField(nmsPacketClass, \$T.findMapping(name, \$T.getField(getClass(), \$S), ver))", Field::class.java, reflectClass, mappingUtilsClass, reflectClass, field.name)
+                            methodBuilder.addStatement("final \$T ${field.name}Field = \$T.getFieldSafe(nmsPacketClass, \$T.findMapping(name, \$T.getFieldSafe(getClass(), \$S), ver))", Field::class.java, reflectClass, mappingUtilsClass, reflectClass, field.name)
                                 .addStatement("\$T.setField(${field.name}Field, nmsPacket, ${field.name})", reflectClass)
                         }
                     } }
@@ -191,18 +191,18 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                         val max: Int = reobfAnnotation.members["max"]?.get(0)?.toString()?.toInt() ?: -1
                         if (min != -1 && max != -1) {
                             methodBuilder.beginControlFlow("if (ver < \$L && ver > \$L)", max, min)
-                                .addStatement("this.${field.name} = (\$T) \$T.getFieldSafe(raw, \$T.findMapping(name, \$T.getField(getClass(), \$S), ver))", field.type, reflectClass, mappingUtilsClass, reflectClass, field.name)
+                                .addStatement("this.${field.name} = (\$T) \$T.getField(raw, \$T.findMapping(name, \$T.getFieldSafe(getClass(), \$S), ver))", field.type, reflectClass, mappingUtilsClass, reflectClass, field.name)
                                 .endControlFlow()
                         } else if (min != -1) {
                             methodBuilder.beginControlFlow("if (ver >= \$L)", min)
-                                .addStatement("this.${field.name} = (\$T) \$T.getFieldSafe(raw, \$T.findMapping(name, \$T.getField(getClass(), \$S), ver))", field.type, reflectClass, mappingUtilsClass, reflectClass, field.name)
+                                .addStatement("this.${field.name} = (\$T) \$T.getField(raw, \$T.findMapping(name, \$T.getFieldSafe(getClass(), \$S), ver))", field.type, reflectClass, mappingUtilsClass, reflectClass, field.name)
                                 .endControlFlow()
                         } else if (max != -1) {
                             methodBuilder.beginControlFlow("if (ver <= \$L)", max)
-                                .addStatement("this.${field.name} = (\$T) \$T.getFieldSafe(raw, \$T.findMapping(name, \$T.getField(getClass(), \$S), ver))", field.type, reflectClass, mappingUtilsClass, reflectClass, field.name)
+                                .addStatement("this.${field.name} = (\$T) \$T.getField(raw, \$T.findMapping(name, \$T.getFieldSafe(getClass(), \$S), ver))", field.type, reflectClass, mappingUtilsClass, reflectClass, field.name)
                                 .endControlFlow()
                         } else {
-                            methodBuilder.addStatement("this.${field.name} = (\$T) \$T.getFieldSafe(raw, \$T.findMapping(name, \$T.getField(getClass(), \$S), ver))", field.type, reflectClass, mappingUtilsClass, reflectClass, field.name)
+                            methodBuilder.addStatement("this.${field.name} = (\$T) \$T.getField(raw, \$T.findMapping(name, \$T.getFieldSafe(getClass(), \$S), ver))", field.type, reflectClass, mappingUtilsClass, reflectClass, field.name)
                         }
                     } }
                     .build()
@@ -357,7 +357,7 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
             }
         }
         return joined.entries.stream()
-            .map { "${it.value.joinToString(",")}=${it.key}" }
+            .map { "${it.key}=${it.value.joinToString(",")}" }
             .collect(Collectors.joining("+"))
     }
 
@@ -373,7 +373,7 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
             }
         }
         return joined.entries.stream()
-            .map { "${it.value.joinToString(",")}=${it.key}" }
+            .map { "${it.key}=${it.value.joinToString(",")}" }
             .collect(Collectors.joining("+"))
     }
 }
