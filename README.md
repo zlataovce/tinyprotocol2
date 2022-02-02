@@ -1,4 +1,6 @@
 # tinyprotocol
+![Maven](https://repo.kcra.me/api/badge/latest/snapshots/me/kcra/tinyprotocol/tinyprotocol)  
+
 A Gradle plugin for generating multi-version packet class wrappers for Minecraft: Java Edition.
 
 ## Usage
