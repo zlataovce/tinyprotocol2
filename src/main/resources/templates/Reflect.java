@@ -18,13 +18,14 @@ public final class Reflect {
             addOpensMethod.invoke(java_base, "java.util", unnamed);
         } catch (Throwable ignored) {
         }
+        Object unsafe0 = null;
         try {
             final Field theUnsafeField = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
             theUnsafeField.setAccessible(true);
-            UNSAFE = theUnsafeField.get(null);
+            unsafe0 = theUnsafeField.get(null);
         } catch (Throwable ignored) {
-            UNSAFE = null;
         }
+        UNSAFE = unsafe0;
     }
 
     private Reflect() {
