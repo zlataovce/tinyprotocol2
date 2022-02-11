@@ -6,8 +6,19 @@ A Gradle plugin for generating multi-version packet class wrappers for Minecraft
 
 ## Usage
 ```kotlin
+// settings.gradle(.kts)
+pluginManagement {
+    repositories {
+        maven("https://repo.kcra.me/snapshots")
+        maven("https://repo.screamingsandals.org/public")
+    }
+}
+```
+
+```kotlin
+// build.gradle(.kts)
 plugins {
-    id("me.kcra.tinyprotocol") version "0.0.1-SNAPSHOT"
+    id("me.kcra.tinyprotocol") version "0.0.2-SNAPSHOT"
     java
 }
 
