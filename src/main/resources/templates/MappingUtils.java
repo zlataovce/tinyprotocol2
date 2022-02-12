@@ -1,36 +1,49 @@
 import java.lang.reflect.Field;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public final class MappingUtils {
     // [packet name, [mapping string, [obfuscated mapping, protocolVersions]]]
     private static final Map<String, Map<String, Map<String, List<Integer>>>> CACHE = Collections.synchronizedMap(new HashMap<>());
+    private static final ReadWriteLock LOCK = new ReentrantReadWriteLock();
 
     private MappingUtils() {
     }
 
     public static Map<String, List<Integer>> unwrapMappings(String packetName, String mapping) {
-        final Map<String, Map<String, List<Integer>>> cacheResult = CACHE.get(packetName);
-        if (cacheResult != null) {
-            final Map<String, List<Integer>> cacheResult1 = cacheResult.get(mapping);
-            if (cacheResult1 != null) {
-                return cacheResult1;
+        LOCK.readLock().lock();
+        try {
+            final Map<String, Map<String, List<Integer>>> cacheResult = CACHE.get(packetName);
+            if (cacheResult != null) {
+                final Map<String, List<Integer>> cacheResult1 = cacheResult.get(mapping);
+                if (cacheResult1 != null) {
+                    return cacheResult1;
+                }
             }
+        } finally {
+            LOCK.readLock().unlock();
         }
-        final Map<String, List<Integer>> mappings = new HashMap<>();
-        final String[] parts = mapping.split("\\+");
-        for (int i = 0; i < parts.length; i++) {
-            final String[] sides = parts[i].split("=");
-            mappings.computeIfAbsent(sides[0].replace('/', '.'), key -> new ArrayList<>())
-                    .addAll(Arrays.stream(sides[1].split(",")).map(Integer::parseInt).collect(Collectors.toList()));
+        LOCK.writeLock().lock();
+        try {
+            final Map<String, List<Integer>> mappings = new HashMap<>();
+            final String[] parts = mapping.split("\\+");
+            for (int i = 0; i < parts.length; i++) {
+                final String[] sides = parts[i].split("=");
+                mappings.computeIfAbsent(sides[0].replace('/', '.'), key -> new ArrayList<>())
+                        .addAll(Arrays.stream(sides[1].split(",")).map(Integer::parseInt).collect(Collectors.toList()));
+            }
+            // finalizing protocol lists
+            final Iterator<Map.Entry<String, List<Integer>>> mappingIterator = mappings.entrySet().iterator();
+            while (mappingIterator.hasNext()) {
+                final Map.Entry<String, List<Integer>> entry = mappingIterator.next();
+                entry.setValue(Collections.unmodifiableList(entry.getValue()));
+            }
+            return CACHE.computeIfAbsent(packetName, key -> Collections.synchronizedMap(new HashMap<>())).put(mapping, Collections.unmodifiableMap(mappings));
+        } finally {
+            LOCK.writeLock().unlock();
         }
-        // finalizing protocol lists
-        final Iterator<Map.Entry<String, List<Integer>>> mappingIterator = mappings.entrySet().iterator();
-        while (mappingIterator.hasNext()) {
-            final Map.Entry<String, List<Integer>> entry = mappingIterator.next();
-            entry.setValue(Collections.unmodifiableList(entry.getValue()));
-        }
-        return CACHE.computeIfAbsent(packetName, key -> Collections.synchronizedMap(new HashMap<>())).put(mapping, Collections.unmodifiableMap(mappings));
     }
 
     public static String findMapping(Map<String, List<Integer>> unwrapped, int ver) {
