@@ -109,12 +109,16 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                                 fieldBuilder.initializer("null")
                             }
                             val fieldType: TypeName = fieldBuilder.javaClass.getDeclaredField("type").also { it.trySetAccessible() }.get(fieldBuilder) as TypeName
-                            if (fieldType == ClassName.OBJECT && extension.generateMetadata) {
-                                fieldBuilder.addAnnotation(
-                                    AnnotationSpec.builder(ClassName.get(extension.utilsPackageName, "Metadata"))
-                                        .addMember("externalType", "\$S", convertType(field.mappings[0].value().value()))
-                                        .build()
-                                )
+                            if (fieldType == ClassName.OBJECT) {
+                                val typeClass: String = convertType(field.mappings[0].value().value())
+                                fieldBuilder.addJavadoc("A packet field with a non-JDK type: $typeClass")
+                                if (extension.generateMetadata) {
+                                    fieldBuilder.addAnnotation(
+                                        AnnotationSpec.builder(ClassName.get(extension.utilsPackageName, "Metadata"))
+                                            .addMember("externalType", "\$S", typeClass)
+                                            .build()
+                                    )
+                                }
                             }
                         }
                         .addAnnotation(
