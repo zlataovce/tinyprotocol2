@@ -18,7 +18,6 @@ repositories {
 dependencies {
     compileOnly(kotlin("stdlib"))
     implementation("me.kcra.acetylene:srgutils:0.0.2-SNAPSHOT")
-    implementation("net.minecraftforge:srgutils:0.4.11-SNAPSHOT")
     implementation("com.squareup:javapoet:1.13.0")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.13.1")
 }

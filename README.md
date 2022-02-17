@@ -9,6 +9,8 @@ A Gradle plugin for generating multi-version packet class wrappers for Minecraft
 // settings.gradle(.kts)
 pluginManagement {
     repositories {
+        mavenCentral()
+        maven("https://repo.kcra.me/releases")
         maven("https://repo.kcra.me/snapshots")
         maven("https://repo.screamingsandals.org/public")
     }
