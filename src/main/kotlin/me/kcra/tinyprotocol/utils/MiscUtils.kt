@@ -15,6 +15,7 @@ import java.util.stream.Collectors
 import java.util.zip.ZipFile
 import kotlin.experimental.and
 
+
 val MAPPER: ObjectMapper = jacksonObjectMapper()
 private val SHA_1 = MessageDigest.getInstance("SHA-1")
 
@@ -106,16 +107,32 @@ fun spigotMapping(ver: String, workFolder: File, verifyChecksums: Boolean): File
     val buildDataRev: String = versionManifest.path("refs").path("BuildData").asText()
     val buildDataManifest: JsonNode =
         MAPPER.readTree(URL("https://hub.spigotmc.org/stash/projects/SPIGOT/repos/builddata/raw/info.json?at=$buildDataRev"))
-    return if (buildDataManifest.has("classMappings")) {
-        getFromURL(
-            "https://hub.spigotmc.org/stash/projects/SPIGOT/repos/builddata/raw/mappings/" + buildDataManifest.path("classMappings")
-                .asText().toString() + "?at=$buildDataRev",
-            "spigot_$ver.csrg",
-            workFolder,
-            null,
-            verifyChecksums
+    if (!buildDataManifest.has("classMappings")) {
+        return null
+    }
+    val classMapping: File = getFromURL(
+        "https://hub.spigotmc.org/stash/projects/SPIGOT/repos/builddata/raw/mappings/" + buildDataManifest.path("classMappings")
+            .asText() + "?at=$buildDataRev",
+        "spigot_${ver}_cl.csrg",
+        workFolder,
+        null,
+        verifyChecksums
+    ) ?: return null
+    if (buildDataManifest.has("memberMappings")) {
+        return concatFiles(
+            newFile("spigot_${ver}_joined.csrg", workFolder),
+            classMapping,
+            getFromURL(
+                "https://hub.spigotmc.org/stash/projects/SPIGOT/repos/builddata/raw/mappings/" + buildDataManifest.path("memberMappings")
+                    .asText() + "?at=$buildDataRev",
+                "spigot_${ver}_mem.csrg",
+                workFolder,
+                null,
+                verifyChecksums
+            ) ?: return classMapping
         )
-    } else null
+    }
+    return classMapping
 }
 
 fun getFileChecksum(digest: MessageDigest, file: File): String {
@@ -150,4 +167,19 @@ fun getContentLength(url: URL): Long {
         }
     }
     return -1
+}
+
+fun concatFiles(outFile: File, vararg files: File): File {
+    FileOutputStream(outFile).use { outputStream ->
+        val buf = ByteArray(1024)
+        for (file in files) {
+            FileInputStream(file).use { inputStream ->
+                var b: Int
+                while (inputStream.read(buf).also { b = it } != -1) {
+                    outputStream.write(buf, 0, b)
+                }
+            }
+        }
+    }
+    return outFile
 }

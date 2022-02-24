@@ -7,6 +7,7 @@ import me.kcra.acetylene.core.TypedMappingFile
 import me.kcra.acetylene.core.ancestry.ClassAncestorTree
 import me.kcra.acetylene.core.ancestry.DescriptableAncestorTree
 import me.kcra.acetylene.core.utils.MappingUtils.*
+import me.kcra.acetylene.core.utils.Pair
 import me.kcra.tinyprotocol.TinyProtocolPluginExtension
 import me.kcra.tinyprotocol.utils.MAPPER
 import me.kcra.tinyprotocol.utils.MappingType
@@ -44,15 +45,45 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
 
         val reflectClass: ClassName = ClassName.get(extension.utilsPackageName, "Reflect")
         val mappingUtilsClass: ClassName = ClassName.get(extension.utilsPackageName, "MappingUtils")
-        val packetTree: ClassAncestorTree = ClassAncestorTree.of("net/minecraft/network/protocol/Packet", mappings)
+        val packetTree: ClassAncestorTree = ClassAncestorTree.of(mappings, listOf(
+            // mojang
+            "net/minecraft/network/protocol/Packet",
+            // searge 1.13.2 and lower
+            "net/minecraft/network/Packet",
+            // searge 1.14 and higher
+            "net/minecraft/network/IPacket",
+            // intermediary
+            "net/minecraft/class_2596"
+        ))
         var readMethodTree: DescriptableAncestorTree? = null
         try {
-            readMethodTree = packetTree.methodAncestors("read", "(Lnet/minecraft/network/FriendlyByteBuf;)V")
+            readMethodTree = packetTree.methodAncestors(listOf(
+                // mojang
+                Pair.of("read", "(Lnet/minecraft/network/FriendlyByteBuf;)V"),
+                // searge
+                Pair.of("func_148837_a", "(Lnet/minecraft/network/PacketBuffer;)V"),
+                // intermediary
+                Pair.of("method_11053", "(Lnet/minecraft/class_2540;)V")
+            ))
         } catch (ignored: IllegalArgumentException) {
             // ignored
         }
-        val writeMethodTree: DescriptableAncestorTree = packetTree.methodAncestors("write", "(Lnet/minecraft/network/FriendlyByteBuf;)V")
-        val friendlyByteBufTree: ClassAncestorTree = ClassAncestorTree.of("net/minecraft/network/FriendlyByteBuf", mappings)
+        val writeMethodTree: DescriptableAncestorTree = packetTree.methodAncestors(listOf(
+            // mojang
+            Pair.of("write", "(Lnet/minecraft/network/FriendlyByteBuf;)V"),
+            // searge
+            Pair.of("func_148840_b", "(Lnet/minecraft/network/PacketBuffer;)V"),
+            // intermediary
+            Pair.of("method_11052", "(Lnet/minecraft/class_2540;)V")
+        ))
+        val friendlyByteBufTree: ClassAncestorTree = ClassAncestorTree.of(mappings, listOf(
+            // mojang
+            "net/minecraft/network/FriendlyByteBuf",
+            // searge
+            "net/minecraft/network/PacketBuffer",
+            // intermediary
+            "net/minecraft/class_2540"
+        ))
 
         for (name: String in extension.packets) {
             logger.log(LogLevel.INFO, "Creating packet wrapper of class $name...")
