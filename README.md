@@ -52,4 +52,4 @@ protocol {
 - [ ] Caching of the FriendlyByteBuf class and its methods
 - [x] Mapping cache
 - [x] FriendlyByteBuf read/write methods
-- [ ] [Narcissus](https://github.com/toolfactory/narcissus) support (to provide an alternative to the Unsafe usages)
+- [ ] [Narcissus](https://github.com/toolfactory/narcissus) and [Objenesis](https://github.com/easymock/objenesis) support (to provide an alternative to the Unsafe usages)
