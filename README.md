@@ -44,3 +44,12 @@ protocol {
     generateMetadata = false // generates a @Metadata annotation with additional information where available, defaults to false
 }
 ```
+
+## Features
+
+- [x] Wrapper generation
+- [x] @Metadata annotation
+- [ ] Caching of the FriendlyByteBuf class and its methods
+- [x] Mapping cache
+- [x] FriendlyByteBuf read/write methods
+- [ ] [Narcissus](https://github.com/toolfactory/narcissus) support (to provide an alternative to the Unsafe usages)
