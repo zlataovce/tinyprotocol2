@@ -49,7 +49,6 @@ protocol {
 
 - [x] Wrapper generation
 - [x] @Metadata annotation
-- [ ] Caching of the FriendlyByteBuf class and its methods
 - [x] Mapping cache
 - [x] FriendlyByteBuf read/write methods
-- [ ] [Narcissus](https://github.com/toolfactory/narcissus) and [Objenesis](https://github.com/easymock/objenesis) support (to provide an alternative to the Unsafe usages)
+- [x] [Narcissus](https://github.com/toolfactory/narcissus) and [Objenesis](https://github.com/easymock/objenesis) support (to provide an alternative to the Unsafe usages)

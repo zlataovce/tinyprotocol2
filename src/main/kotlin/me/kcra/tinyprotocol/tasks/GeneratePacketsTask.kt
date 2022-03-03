@@ -12,6 +12,7 @@ import me.kcra.tinyprotocol.TinyProtocolPluginExtension
 import me.kcra.tinyprotocol.utils.MAPPER
 import me.kcra.tinyprotocol.utils.MappingType
 import me.kcra.tinyprotocol.utils.ProtocolData
+import me.kcra.tinyprotocol.utils.ReflectType
 import org.gradle.api.DefaultTask
 import org.gradle.api.logging.LogLevel
 import org.gradle.api.tasks.Internal
@@ -315,7 +316,12 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
         if (extension.generateMetadata) {
             copyTemplateClass("Metadata")
         }
-        copyTemplateClasses("Reflect", "Reobfuscate", "MappingUtils", "Packet")
+        when (extension.reflectOptions.type) {
+            ReflectType.ZERODEP -> copyTemplateClass("Reflect")
+            ReflectType.NARCISSUS -> copyTemplateClassAs("NarcissusReflect", "Reflect")
+            ReflectType.OBJENESIS -> copyTemplateClassAs("ObjenesisReflect", "Reflect")
+        }
+        copyTemplateClasses("Reobfuscate", "MappingUtils", "Packet")
     }
 
     private fun protocolVersions(): Map<String, Int> {
@@ -369,15 +375,21 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
         return this
     }
 
-    private fun copyTemplateClasses(vararg names: String) {
-        names.forEach { copyTemplateClass(it) }
-    }
+    private fun copyTemplateClasses(vararg names: String) = names.forEach { copyTemplateClass(it) }
 
-    private fun copyTemplateClass(name: String) {
-        val path: Path = Path.of(sourceSet.java.srcDirs.first().absolutePath, extension.utilsPackageName.replace('.', File.separatorChar), "$name.java")
+    private fun copyTemplateClass(name: String) = copyTemplateClassAs(name, name)
+
+    private fun copyTemplateClassAs(name: String, newName: String) {
+        val path: Path = Path.of(sourceSet.java.srcDirs.first().absolutePath, extension.utilsPackageName.replace('.', File.separatorChar), "$newName.java")
             .also { it.parent.toFile().mkdirs() }
         Files.copy(javaClass.getResourceAsStream("/templates/$name.java")!!, path, StandardCopyOption.REPLACE_EXISTING)
-        Files.writeString(path, "package ${extension.utilsPackageName};\n\n" + Files.readString(path, StandardCharsets.UTF_8).replace("{utilPackage}", extension.utilsPackageName))
+        Files.writeString(
+            path,
+            "package ${extension.utilsPackageName};\n\n" + Files.readString(path, StandardCharsets.UTF_8)
+                .replace("{utilPackage}", extension.utilsPackageName)
+                .replace("{narcissusPackage}", extension.reflectOptions.narcissusPackage)
+                .replace("{objenesisPackage}", extension.reflectOptions.objenesisPackage)
+        )
     }
 
     private fun joinMappings(tree: ClassAncestorTree, protocolVersions: List<Int>): String {
