@@ -19,6 +19,8 @@ pluginManagement {
 
 ```kotlin
 // build.gradle(.kts)
+import me.kcra.tinyprotocol.utils.ReflectType
+
 plugins {
     id("me.kcra.tinyprotocol") version "0.0.2-SNAPSHOT"
     java
@@ -42,6 +44,19 @@ protocol {
     // but marginally improves build performance (some mappings don't have checksums and are re-downloaded every time)
     verifyChecksums = true
     generateMetadata = false // generates a @Metadata annotation with additional information where available, defaults to false
+    
+    // optional Reflect class settings
+    reflect {
+        // sets the Reflect class implementation type, defaults to ZERODEP
+        // available: ZERODEP, NARCISSUS, OBJENESIS
+        // NARCISSUS impl needs the Narcissus library on the classpath: https://github.com/toolfactory/narcissus
+        // OBJENESIS impl needs the Objenesis library on the classpath: https://github.com/easymock/objenesis
+        type = ReflectType.ZERODEP
+        // the Narcissus library package name, defaults to "io.github.toolfactory.narcissus", not needed if not using NARCISSUS impl
+        narcissusPackage = "io.github.toolfactory.narcissus"
+        // the Objenesis library package name, defaults to "org.objenesis", not needed if not using OBJENESIS impl
+        objenesisPackage = "org.objenesis"
+    }
 }
 ```
 
