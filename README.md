@@ -22,7 +22,7 @@ pluginManagement {
 import me.kcra.tinyprotocol.utils.ReflectType
 
 plugins {
-    id("me.kcra.tinyprotocol") version "0.0.2-SNAPSHOT"
+    id("me.kcra.tinyprotocol") version "0.0.3-SNAPSHOT"
     java
 }
 
