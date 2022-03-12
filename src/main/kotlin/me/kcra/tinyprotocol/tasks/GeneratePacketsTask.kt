@@ -1,3 +1,27 @@
+/*
+ * This file is part of tinyprotocol2, licensed under the MIT License.
+ *
+ * Copyright (c) 2022 Matouš Kučera
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 package me.kcra.tinyprotocol.tasks
 
 import com.fasterxml.jackson.module.kotlin.readValue
@@ -22,7 +46,6 @@ import java.io.File
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.net.URL
-import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -91,7 +114,9 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
             val tree: ClassAncestorTree = ClassAncestorTree.of(name.replace('.', '/'), mappings)
             logger.log(LogLevel.INFO, "Mapped ${tree.size()} version(s) of mapping $name.")
             val className: String = tree.classes[0].mappings[0].value().replace('/', '.')
-            val builder: TypeSpec.Builder = TypeSpec.classBuilder("W" + className.substring(className.lastIndexOf('.') + 1))
+            val packageName: String = extension.packageName ?: className.substring(0, className.lastIndexOf('.'))
+            val transformedClassName: String = extension.className.replace("{className}", className.substring(className.lastIndexOf('.') + 1))
+            val builder: TypeSpec.Builder = TypeSpec.classBuilder(transformedClassName)
                 .addModifiers(Modifier.PUBLIC)
                 .addSuperinterface(ClassName.get(extension.utilsPackageName, "Packet"))
                 .addAnnotation(
@@ -110,7 +135,7 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                         }
                         .build()
                 )
-            val currentClassName: ClassName = ClassName.get(extension.packageName ?: className.substring(0, className.lastIndexOf('.')), "W" + className.substring(className.lastIndexOf('.') + 1))
+            val currentClassName: ClassName = ClassName.get(packageName, transformedClassName)
             // fields
             for (field: TypedDescriptableMapping in tree.walkFields()) {
                 if (field.has(MappingType.MOJANG) && field.isConstant(MappingType.MOJANG)) {
@@ -308,7 +333,10 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                     .endControlFlow()
                     .build()
             )
-            JavaFile.builder(extension.packageName ?: className.substring(0, className.lastIndexOf('.')), builder.build())
+            JavaFile.builder(packageName, builder.build())
+                .indent("    ") // 4 space indent
+                .addFileComment("This file was generated with tinyprotocol2. Do not edit, changes will be overwritten!")
+                .skipJavaLangImports(true)
                 .build()
                 .writeToFile(sourceSet.java.srcDirs.first())
             logger.log(LogLevel.LIFECYCLE, "Wrote ${currentClassName.simpleName()}.")
@@ -380,13 +408,13 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
     private fun copyTemplateClass(name: String) = copyTemplateClassAs(name, name)
 
     private fun copyTemplateClassAs(name: String, newName: String) {
-        val path: Path = Path.of(sourceSet.java.srcDirs.first().absolutePath, extension.utilsPackageName.replace('.', File.separatorChar), "$newName.java")
-            .also { it.parent.toFile().mkdirs() }
-        Files.copy(javaClass.getResourceAsStream("/templates/$name.java")!!, path, StandardCopyOption.REPLACE_EXISTING)
-        Files.writeString(
-            path,
-            "package ${extension.utilsPackageName};\n\n" + Files.readString(path, StandardCharsets.UTF_8)
-                .replace("{utilPackage}", extension.utilsPackageName)
+        val file: File = Path.of(sourceSet.java.srcDirs.first().absolutePath, extension.utilsPackageName.replace('.', File.separatorChar), "$newName.java")
+            .toFile()
+            .also { it.parentFile.mkdirs() }
+        Files.copy(javaClass.getResourceAsStream("/templates/$name.java")!!, file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        file.writeText(
+            file.readText()
+                .replace("{utilsPackage}", extension.utilsPackageName)
                 .replace("{narcissusPackage}", extension.reflectOptions.narcissusPackage)
                 .replace("{objenesisPackage}", extension.reflectOptions.objenesisPackage)
         )

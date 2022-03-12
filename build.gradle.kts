@@ -1,12 +1,13 @@
 plugins {
     kotlin("jvm") version "1.6.10"
     id("com.gradle.plugin-publish") version "0.20.0"
+    id("org.cadixdev.licenser") version "0.6.1"
     id("java-gradle-plugin")
     id("maven-publish")
 }
 
 group = "me.kcra.tinyprotocol"
-version = "0.0.3-SNAPSHOT"
+version = "0.0.3"
 
 repositories {
     mavenCentral()
@@ -58,4 +59,8 @@ java {
 
 configurations.all {
     resolutionStrategy.cacheDynamicVersionsFor(0, "seconds")
+}
+
+license {
+    header(file("license_header.txt"))
 }

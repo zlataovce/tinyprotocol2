@@ -22,7 +22,7 @@ pluginManagement {
 import me.kcra.tinyprotocol.utils.ReflectType
 
 plugins {
-    id("me.kcra.tinyprotocol") version "0.0.3-SNAPSHOT"
+    id("me.kcra.tinyprotocol") version "0.0.3"
     java
 }
 
@@ -38,6 +38,7 @@ protocol {
 
     // optional settings
     sourceSet = "generated" // the source set name, defaults to "generated"
+    className = "{className}" // the packet class name template, {className} is replaced with the mojang-mapped class name, defaults to "{className}"
     packageName = null // the packet package name, defaults to mojang-mapped package name
     utilsPackageName = "me.kcra.tinyprotocol.utils" // the utils package name, defaults to "me.kcra.tinyprotocol.utils"
     // mapping checksum verification, defaults to true, setting this to false may cause unexpected errors
