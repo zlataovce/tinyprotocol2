@@ -33,10 +33,7 @@ import me.kcra.acetylene.core.ancestry.DescriptableAncestorTree
 import me.kcra.acetylene.core.utils.MappingUtils.*
 import me.kcra.acetylene.core.utils.Pair
 import me.kcra.tinyprotocol.TinyProtocolPluginExtension
-import me.kcra.tinyprotocol.utils.MAPPER
-import me.kcra.tinyprotocol.utils.MappingType
-import me.kcra.tinyprotocol.utils.ProtocolData
-import me.kcra.tinyprotocol.utils.ReflectType
+import me.kcra.tinyprotocol.utils.*
 import org.gradle.api.DefaultTask
 import org.gradle.api.logging.LogLevel
 import org.gradle.api.tasks.Internal
@@ -119,6 +116,7 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
             val builder: TypeSpec.Builder = TypeSpec.classBuilder(transformedClassName)
                 .addModifiers(Modifier.PUBLIC)
                 .addSuperinterface(ClassName.get(extension.utilsPackageName, "Packet"))
+                .addJavadoc("A packet wrapper for the $className class.")
                 .addAnnotation(
                     AnnotationSpec.builder(ClassName.get(extension.utilsPackageName, "Reobfuscate"))
                         .addMember("value", "\$S", joinMappings(tree, protocolList))
@@ -201,7 +199,7 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                     .addModifiers(Modifier.PUBLIC)
                     .returns(ClassName.OBJECT)
                     .addParameter(ClassName.INT, "ver")
-                    .addAnnotation(AnnotationSpec.builder(ClassName.get("java.lang", "Override")).build())
+                    .override()
                     .addStatement("final String name = getClass().getSimpleName()")
                     .addStatement("final Class<?> nmsPacketClass = \$T.getClassSafe(\$T.findMapping(getClass(), ver))", reflectClass, mappingUtilsClass)
                     .addStatement("final Object nmsPacket = \$T.construct(nmsPacketClass)", reflectClass)
@@ -241,7 +239,7 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                     .addModifiers(Modifier.PUBLIC)
                     .addParameter(ClassName.OBJECT, "raw")
                     .addParameter(ClassName.INT, "ver")
-                    .addAnnotation(AnnotationSpec.builder(ClassName.get("java.lang", "Override")).build())
+                    .override()
                     .addStatement("final String name = getClass().getSimpleName()")
                     .also { methodBuilder -> builder.fieldSpecs.forEach { field ->
                         val reobfAnnotation: AnnotationSpec = field.annotations.stream()
@@ -274,7 +272,7 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                     .addModifiers(Modifier.PUBLIC)
                     .addParameter(ClassName.OBJECT, "buf")
                     .addParameter(ClassName.INT, "ver")
-                    .addAnnotation(AnnotationSpec.builder(ClassName.get("java.lang", "Override")).build())
+                    .override()
                     .addStatement("final Class<?> nmsPacketClass = \$T.getClassSafe(\$T.findMapping(getClass(), ver))", reflectClass, mappingUtilsClass)
                     .addStatement("final Class<?> friendlyByteBufClass = \$T.getClassSafe(\$T.findMapping(getClass(), \$S, ver))", reflectClass, mappingUtilsClass, joinMappings(friendlyByteBufTree, protocolList))
                     .also { methodBuilder ->
@@ -300,7 +298,7 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                     .addModifiers(Modifier.PUBLIC)
                     .addParameter(ClassName.OBJECT, "buf")
                     .addParameter(ClassName.INT, "ver")
-                    .addAnnotation(AnnotationSpec.builder(ClassName.get("java.lang", "Override")).build())
+                    .override()
                     .addStatement("final Object nmsPacket = toNMS(ver)")
                     .addStatement("final Class<?> friendlyByteBufClass = \$T.getClassSafe(\$T.findMapping(getClass(), \$S, ver))", reflectClass, mappingUtilsClass, joinMappings(friendlyByteBufTree, protocolList))
                     .addStatement("final String writeMethodMapping = \$T.findMapping(getClass(), \$S, ver)", mappingUtilsClass, joinMappings(writeMethodTree, protocolList))
@@ -372,6 +370,14 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
             return ClassName.get("", name)
         }
         return ClassName.bestGuess(name)
+    }
+    
+    private fun MethodSpec.Builder.override(withJavadoc: Boolean = true): MethodSpec.Builder {
+        addAnnotation(OVERRIDE_ANNOTATION)
+        if (withJavadoc) {
+            addJavadoc("{@inheritDoc}")
+        }
+        return this
     }
 
     private fun TypeSpec.Builder.createField(field: FieldSpec): TypeSpec.Builder {

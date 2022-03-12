@@ -27,6 +27,8 @@ package me.kcra.tinyprotocol.utils
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.squareup.javapoet.AnnotationSpec
+import com.squareup.javapoet.ClassName
 import java.io.*
 import java.net.HttpURLConnection
 import java.net.URL
@@ -39,8 +41,8 @@ import java.util.stream.Collectors
 import java.util.zip.ZipFile
 import kotlin.experimental.and
 
-
 val MAPPER: ObjectMapper = jacksonObjectMapper()
+val OVERRIDE_ANNOTATION: AnnotationSpec = AnnotationSpec.builder(ClassName.get("java.lang", "Override")).build()
 private val SHA_1 = MessageDigest.getInstance("SHA-1")
 
 fun newFile(fileName: String, workFolder: File): File {
