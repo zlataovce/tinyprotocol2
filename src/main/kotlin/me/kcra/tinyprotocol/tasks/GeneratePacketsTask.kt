@@ -274,10 +274,13 @@ abstract class GeneratePacketsTask @Inject constructor(private val extension: Ti
                     .addParameter(ClassName.INT, "ver")
                     .override()
                     .addStatement("final Class<?> nmsPacketClass = \$T.getClassSafe(\$T.findMapping(getClass(), ver))", reflectClass, mappingUtilsClass)
-                    .addStatement("final Class<?> friendlyByteBufClass = \$T.getClassSafe(\$T.findMapping(getClass(), \$S, ver))", reflectClass, mappingUtilsClass, joinMappings(friendlyByteBufTree, protocolList))
                     .also { methodBuilder ->
                         if (readMethodTree != null) {
-                            methodBuilder.addStatement("final String readMethodMapping = \$T.findMapping(getClass(), \$S, ver)", mappingUtilsClass, joinMappings(readMethodTree, protocolList))
+                            methodBuilder.addStatement("final Class<?> friendlyByteBufClass = \$T.getClassSafe(\$T.findMapping(getClass(), \$S, ver))", reflectClass, mappingUtilsClass, joinMappings(friendlyByteBufTree, protocolList))
+                                .beginControlFlow("if (!friendlyByteBufClass.isInstance(buf))")
+                                .addStatement("throw new IllegalArgumentException(\"Not a FriendlyByteBuf\")")
+                                .endControlFlow()
+                                .addStatement("final String readMethodMapping = \$T.findMapping(getClass(), \$S, ver)", mappingUtilsClass, joinMappings(readMethodTree, protocolList))
                                 .beginControlFlow("if (readMethodMapping != null)")
                                 .addStatement("final Object nmsPacket = toNMS(ver)")
                                 .addStatement("final \$T readMethod = \$T.getMethodSafe(nmsPacket.getClass(), readMethodMapping, friendlyByteBufClass)", Method::class.java, reflectClass)
