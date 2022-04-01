@@ -43,7 +43,7 @@ abstract class TinyProtocolPluginExtension {
     fun version(ver: String, protocol: Int) = if (protocol > -1) versions.put(ver, protocol)
         else throw IllegalArgumentException("Protocol version must be zero or higher")
 
-    fun reflect(configurer: (ReflectOptions) -> Unit) = configurer(reflectOptions)
+    fun reflect(configurer: ReflectOptions.() -> Unit) = configurer(reflectOptions)
 
     data class ReflectOptions(
         var type: ReflectType = ReflectType.ZERODEP,
