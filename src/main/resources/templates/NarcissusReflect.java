@@ -26,7 +26,6 @@ package {utilsPackage};
 
 import {narcissusPackage}.Narcissus;
 
-import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;

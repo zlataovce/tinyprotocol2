@@ -1,9 +1,9 @@
 plugins {
-    kotlin("jvm") version "1.6.10"
-    id("com.gradle.plugin-publish") version "0.20.0"
+    kotlin("jvm") version embeddedKotlinVersion
+    id("com.gradle.plugin-publish") version "0.21.0"
     id("org.cadixdev.licenser") version "0.6.1"
-    id("java-gradle-plugin")
-    id("maven-publish")
+    `java-gradle-plugin`
+    `maven-publish`
 }
 
 group = "me.kcra.tinyprotocol"

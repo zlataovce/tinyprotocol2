@@ -26,7 +26,6 @@ package {utilsPackage};
 
 import {objenesisPackage}.ObjenesisStd;
 
-import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -38,15 +37,6 @@ public final class Reflect {
     public static final Object UNSAFE;
 
     static {
-        try {
-            final Method getModuleMethod = Class.class.getDeclaredMethod("getModule");
-            final Object java_base = getModuleMethod.invoke(Field.class);
-            final Object unnamed = getModuleMethod.invoke(Reflect.class);
-            final Method addOpensMethod = getModuleMethod.getReturnType().getDeclaredMethod("addOpens", String.class, getModuleMethod.getReturnType());
-            addOpensMethod.invoke(java_base, "java.lang.reflect", unnamed);
-            addOpensMethod.invoke(java_base, "java.util", unnamed);
-        } catch (Throwable ignored) {
-        }
         Object unsafe0 = null;
         try {
             final Field theUnsafeField = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
@@ -157,45 +147,32 @@ public final class Reflect {
     }
 
     public static void setField(Field field, Object instance, Object value) {
-        try {
-            field.setAccessible(true);
-            if (Modifier.isFinal(field.getModifiers())) {
+        field.setAccessible(true);
+        if (Modifier.isFinal(field.getModifiers())) {
+            try {
                 final Field modifiersField = Field.class.getDeclaredField("modifiers");
                 modifiersField.setAccessible(true);
                 modifiersField.setInt(field, field.getModifiers() & ~Modifier.FINAL);
 
-                try {
-                    field.set(instance, value);
-                } catch (Throwable ignored1) {
+                field.set(instance, value);
+            } catch (Throwable ignored) {
+                if (UNSAFE != null) {
                     try {
-                        final Method privateLookupInMethod = MethodHandles.class.getDeclaredMethod("privateLookupIn", Class.class, MethodHandles.Lookup.class);
-                        final MethodHandles.Lookup lookup = (MethodHandles.Lookup) privateLookupInMethod.invoke(null, Field.class, MethodHandles.lookup());
-                        final Method findVarHandleMethod = MethodHandles.Lookup.class.getDeclaredMethod("findVarHandle", Class.class, String.class, Class.class);
+                        final sun.misc.Unsafe theUnsafe = (sun.misc.Unsafe) UNSAFE;
 
-                        final Object varHandle = findVarHandleMethod.invoke(lookup, Field.class, "modifiers", int.class);
-                        final Method setMethod = varHandle.getClass().getDeclaredMethod("set", Object[].class);
+                        final Object ufo = instance != null ? instance : theUnsafe.staticFieldBase(field);
+                        final long offset = instance != null ? theUnsafe.objectFieldOffset(field) : theUnsafe.staticFieldOffset(field);
 
-                        setMethod.invoke(varHandle, new Object[] {field, field.getModifiers() & ~Modifier.FINAL});
-
-                        field.set(instance, value);
-                    } catch (Throwable ignored2) {
-                        if (UNSAFE != null) {
-                            try {
-                                final sun.misc.Unsafe theUnsafe = (sun.misc.Unsafe) UNSAFE;
-
-                                final Object ufo = instance != null ? instance : theUnsafe.staticFieldBase(field);
-                                final long offset = instance != null ? theUnsafe.objectFieldOffset(field) : theUnsafe.staticFieldOffset(field);
-
-                                theUnsafe.putObject(ufo, offset, value);
-                            } catch (Throwable ignored3) {
-                            }
-                        }
+                        theUnsafe.putObject(ufo, offset, value);
+                    } catch (Throwable ignored1) {
                     }
                 }
-            } else {
-                field.set(instance, value);
             }
-        } catch (Throwable ignored) {
+        } else {
+            try {
+                field.set(instance, value);
+            } catch (Throwable ignored) {
+            }
         }
     }
 }
